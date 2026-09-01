@@ -1,0 +1,28 @@
+# ══════════════════════════════════════════════════════════════
+#  ИНСТАЛАЦИЈА:  pip install -r requirements.txt
+# ══════════════════════════════════════════════════════════════
+
+# --- Основни: работа со податоци ---
+numpy>=1.24
+pandas>=2.0
+requests>=2.31
+
+# --- Машинско учење (ml_prognoza.py + ml_prognoza.ipynb) ---
+xgboost>=2.0
+scikit-learn>=1.3      # ⚠ ЗАДОЛЖИТЕЛНО — xgboost не работи без него!
+joblib>=1.3
+
+# --- Графикони (само за notebook-от) ---
+matplotlib>=3.7
+seaborn>=0.13
+
+# --- Оптимизација (lp_optimizacija.py) ---
+pulp>=2.7
+
+# --- Веб сервер (api.py) ---
+flask>=3.0
+flask-cors>=4.0
+
+# --- Jupyter notebook ---
+jupyter>=1.0
+ipykernel>=6.25

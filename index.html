@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="mk">
+<head>
+<meta charset="UTF-8">
+<title>Димензионирање на батерија — Мариа Митрикеска</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0B1E3F; --surface:#12294F; --ink:#F5F7FA; --muted:#A9B7D0;
+    --accent:#FFB81C; --mint:#3DDC97; --rose:#FF6B6B; --sky:#4CC2FF;
+    --border:rgba(255,255,255,0.08);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    background:linear-gradient(135deg,#0B1E3F 0%,#162D55 100%);
+    color:var(--ink); min-height:100vh;
+  }
+  header{
+    padding:32px 48px 24px; border-bottom:1px solid var(--border);
+    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px;
+  }
+  header h1{margin:0; font-size:26px; font-weight:700; letter-spacing:-0.3px}
+  header h1 span{color:var(--accent)}
+  header .sub{color:var(--muted); font-size:13px; margin-top:4px}
+  header .author{font-size:12px; color:var(--muted); text-align:right}
+  header .author b{color:var(--ink); font-weight:600}
+  @media(max-width:700px){
+    header{padding:20px 18px 16px}
+    header h1{font-size:20px}
+    header .sub{font-size:12px}
+    header .author{text-align:left; font-size:11px}
+  }
+
+  .layout{display:grid; grid-template-columns:320px 1fr; gap:28px; padding:28px 48px 48px}
+  @media(max-width:960px){
+    .layout{grid-template-columns:1fr; padding:20px; gap:20px}
+    aside{position:static !important}
+  }
+  @media(max-width:700px){
+    .layout{padding:14px; gap:16px}
+    aside{padding:18px !important}
+  }
+
+  /* Sidebar */
+  aside{
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:24px; height:fit-content; position:sticky; top:20px;
+  }
+  aside h2{
+    margin:0 0 18px; font-size:14px; text-transform:uppercase; letter-spacing:1.4px;
+    color:var(--accent);
+  }
+  .field{margin-bottom:18px}
+  .field label{
+    display:block; font-size:12px; color:var(--muted); margin-bottom:6px;
+    text-transform:uppercase; letter-spacing:0.6px;
+  }
+  .field input, .field select{
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
+    background:rgba(0,0,0,0.2); color:var(--ink); font-size:14px; font-family:inherit;
+  }
+  .field input:focus, .field select:focus{outline:none; border-color:var(--accent)}
+  .field .hint{font-size:11px; color:var(--muted); margin-top:4px}
+  .presets{display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap}
+  .preset-btn{
+    flex:1; min-width:80px; padding:8px 6px; background:rgba(255,255,255,0.04);
+    border:1px solid var(--border); color:var(--ink); border-radius:8px; cursor:pointer;
+    font-size:12px; font-family:inherit; transition:all 0.15s;
+  }
+  .preset-btn:hover{border-color:var(--accent); background:rgba(255,184,28,0.1)}
+  .preset-btn.active{background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:600}
+  .run-btn{
+    width:100%; padding:14px; background:var(--accent); color:var(--bg);
+    border:none; border-radius:10px; font-size:15px; font-weight:700; cursor:pointer;
+    font-family:inherit; margin-top:8px; transition:all 0.15s;
+  }
+  .run-btn:hover{background:#FFC64D; transform:translateY(-1px)}
+  .run-btn:disabled{opacity:0.5; cursor:wait; transform:none}
+
+  /* Main */
+  main{display:flex; flex-direction:column; gap:24px}
+  .hero{
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:24px 28px;
+  }
+  .hero h2{margin:0 0 6px; font-size:20px; font-weight:600}
+  .hero p{margin:0; color:var(--muted); font-size:14px; line-height:1.6}
+
+  .metrics{display:grid; grid-template-columns:repeat(4,1fr); gap:14px}
+  @media(max-width:1100px){ .metrics{grid-template-columns:repeat(2,1fr)} }
+  @media(max-width:500px){ .metrics{grid-template-columns:1fr} }
+  .metric{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:18px 20px; position:relative; overflow:hidden;
+  }
+  .metric::before{
+    content:""; position:absolute; top:0; left:0; width:4px; height:100%;
+    background:var(--stripe, var(--accent));
+  }
+  .metric .label{
+    font-size:11px; text-transform:uppercase; letter-spacing:0.8px; color:var(--muted);
+    margin-bottom:8px;
+  }
+  .metric .big{font-size:28px; font-weight:700; color:var(--ink); line-height:1.1}
+  .metric .unit{font-size:14px; color:var(--muted); margin-left:4px; font-weight:400}
+  .metric .sub{font-size:12px; color:var(--muted); margin-top:4px}
+  .metric.gold{--stripe:var(--accent)}
+  .metric.mint{--stripe:var(--mint)}
+  .metric.rose{--stripe:var(--rose)}
+  .metric.sky{--stripe:var(--sky)}
+
+  .charts{display:grid; grid-template-columns:1fr 1fr; gap:20px}
+  @media(max-width:900px){ .charts{grid-template-columns:1fr} }
+  .chart-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:20px 22px;
+  }
+  .chart-card h3{margin:0 0 14px; font-size:14px; font-weight:600; color:var(--ink)}
+  .chart-wrap{position:relative; height:240px}
+
+  .table-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:20px 22px; overflow-x:auto;
+  }
+  .table-card h3{margin:0 0 14px; font-size:14px; font-weight:600}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th, td{padding:10px 12px; text-align:right; border-bottom:1px solid var(--border)}
+  th{color:var(--muted); font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:0.6px}
+  td:first-child, th:first-child{text-align:left}
+  tbody tr:hover{background:rgba(255,255,255,0.02)}
+  tr.highlight{background:rgba(255,184,28,0.08)}
+  tr.highlight td{color:var(--accent); font-weight:600}
+
+  .status{
+    padding:12px 16px; border-radius:10px; font-size:13px;
+    background:rgba(255,255,255,0.04); border:1px solid var(--border);
+    display:none;
+  }
+  .status.show{display:block}
+  .status.error{background:rgba(255,107,107,0.1); border-color:var(--rose); color:#FFB3B3}
+  .status.loading{color:var(--accent)}
+
+  .spin{
+    display:inline-block; width:12px; height:12px; border:2px solid rgba(255,184,28,0.3);
+    border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite;
+    vertical-align:middle; margin-right:8px;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .empty{
+    text-align:center; padding:60px 20px; color:var(--muted);
+    background:var(--surface); border:1px dashed var(--border); border-radius:16px;
+  }
+  .empty svg{width:48px; height:48px; margin-bottom:12px; opacity:0.5}
+
+  /* === RESPONSIVE: компаратив картичка (без vs со батерија) === */
+  .compare-grid{display:grid; grid-template-columns:1fr 40px 1fr; gap:20px; align-items:center;}
+  @media(max-width:720px){
+    .compare-grid{grid-template-columns:1fr; gap:12px;}
+    .compare-arrow{transform:rotate(90deg); text-align:center;}
+  }
+
+  /* === RESPONSIVE: финална препорака — 4 мали картички === */
+  .rec-stats-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-top:18px;}
+  @media(max-width:900px){ .rec-stats-grid{grid-template-columns:repeat(2, 1fr);} }
+  @media(max-width:480px){ .rec-stats-grid{grid-template-columns:1fr;} }
+  @media(max-width:700px){
+    #final-rec{padding:20px !important;}
+    #rec-headline{font-size:20px !important;}
+    #rec-reasoning{font-size:13px !important;}
+  }
+
+  /* === RESPONSIVE: табела (horizontal scroll на мобилни) === */
+  .table-card{-webkit-overflow-scrolling: touch;}
+  @media(max-width:600px){
+    table{font-size:12px; min-width:480px;}
+    th, td{padding:8px 10px;}
+  }
+
+  /* === Фикс за long бројки да не преливаат === */
+  .metric .big{word-break:break-word;}
+
+  /* === Responsive: пакет картичка (PV + батерија + вкупно) === */
+  #rec-total-package > div:nth-child(2){
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:12px;
+  }
+  @media(max-width:700px){
+    #rec-total-package > div:nth-child(2){
+      grid-template-columns:1fr; gap:12px;
+    }
+    #rec-total-package > div:nth-child(2) > div:nth-child(3){
+      border-left:none; border-top:1px solid var(--border); padding-left:0; padding-top:12px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Димензионирање на <span>соларна батерија</span></h1>
+    <div class="sub">Оптимално капацитетно решение врз основа на LP оптимизација (PuLP + CBC)</div>
+  </div>
+  <div class="author">
+    <b>Maria Mitrikeska</b><br>
+  </div>
+</header>
+
+<div class="layout">
+
+  <aside>
+    <h2>⚙︎ Параметри</h2>
+
+    <!-- Режим: Домаќинство / Бизнис -->
+    <div style="display:flex; gap:6px; margin-bottom:16px;">
+      <button type="button" id="mode-home" class="mode-tab active" style="flex:1; padding:10px 6px; font-size:13px; font-family:inherit; background:var(--accent); color:var(--bg); border:1px solid var(--accent); border-radius:8px; cursor:pointer; font-weight:700;">🏠 Домаќинство</button>
+      <button type="button" id="mode-business" class="mode-tab" style="flex:1; padding:10px 6px; font-size:13px; font-family:inherit; background:rgba(255,255,255,0.04); color:var(--ink); border:1px solid var(--border); border-radius:8px; cursor:pointer;">🏢 Бизнис</button>
+    </div>
+    <div class="hint" id="mode-hint" style="margin:-8px 0 14px;">Блок тарифи ВТ/НТ · EVN Хоме 2026</div>
+
+    <div class="presets">
+      <button class="preset-btn" data-preset="small">~6.000 МКД</button>
+      <button class="preset-btn active" data-preset="avg">~10.000 МКД</button>
+      <button class="preset-btn" data-preset="large">~12.000 МКД</button>
+    </div>
+
+    <div class="field">
+      <label>🔥 Како се грее куќата?</label>
+      <select id="greenje" style="width:100%; padding:10px 12px; font-family:inherit; font-size:13px; background:rgba(255,255,255,0.04); color:var(--ink); border:1px solid var(--border); border-radius:8px; cursor:pointer;">
+        <option value="struja" selected>⚡ Струја / инвертер клима</option>
+        <option value="toplinska">🌡️ Топлинска пумпа</option>
+        <option value="drva">🪵 Дрва / друго</option>
+      </select>
+      <div class="hint">Греењето на струја = високи зимски сметки → батеријата штеди највеќе</div>
+    </div>
+
+    <div class="field">
+      <label>Месечна EVN сметка (МКД)</label>
+      <input id="bill" type="number" placeholder="нпр. 10000" min="0" step="100">
+      <div class="hint" id="bill-hint">Внеси ја сметката → автоматски пресметуваме kWh и тарифен блок</div>
+    </div>
+
+    <details style="margin-bottom:18px; border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
+      <summary style="cursor:pointer; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:var(--accent);">📅 Имам 4 сметки (поточно!)</summary>
+      <div style="margin-top:10px;">
+        <div class="hint" style="margin-bottom:10px;">По една сметка од секое годишно време — така знаеме КОГА трошиш највеќе (греење зиме? клима лете?)</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div>
+            <label style="font-size:11px; color:var(--muted);">Март (пролет)</label>
+            <input id="smetka-mart" type="number" placeholder="МКД" min="0" step="100" style="width:100%;">
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--muted);">Јуни (лето)</label>
+            <input id="smetka-juni" type="number" placeholder="МКД" min="0" step="100" style="width:100%;">
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--muted);">Септември (есен)</label>
+            <input id="smetka-septemvri" type="number" placeholder="МКД" min="0" step="100" style="width:100%;">
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--muted);">Декември (зима)</label>
+            <input id="smetka-dekemvri" type="number" placeholder="МКД" min="0" step="100" style="width:100%;">
+          </div>
+        </div>
+        <div class="hint" id="smetki-hint" style="margin-top:8px;"></div>
+      </div>
+    </details>
+
+    <div class="field">
+      <label>Годишна потрошувачка (kWh/год)</label>
+      <input id="load" type="number" value="10000" min="1000" max="500000" step="100">
+      <div class="hint" id="load-hint">Просечно семејство со клима + бојлер: ~10,000 kWh/год</div>
+    </div>
+
+    <div class="field">
+      <label>PV систем</label>
+      <div class="pv-toggle" style="display:flex; gap:6px; margin-bottom:8px;">
+        <button type="button" class="pv-tab active" data-mode="have" style="flex:1; padding:8px 6px; font-size:12px; font-family:inherit; background:var(--accent); color:var(--bg); border:1px solid var(--accent); border-radius:8px; cursor:pointer; font-weight:600;">☀️ Имам PV</button>
+        <button type="button" class="pv-tab" data-mode="none" style="flex:1; padding:8px 6px; font-size:12px; font-family:inherit; background:rgba(255,255,255,0.04); color:var(--ink); border:1px solid var(--border); border-radius:8px; cursor:pointer;">❌ Немам PV</button>
+      </div>
+
+      <!-- Mode: Have PV -->
+      <div id="pv-have-block">
+        <div class="size-grid" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-bottom:8px;">
+          <button type="button" class="pv-size-btn" data-kwp="3" style="padding:8px 4px; font-size:12px; font-family:inherit; background:rgba(255,255,255,0.04); color:var(--ink); border:1px solid var(--border); border-radius:6px; cursor:pointer;">3 kWp</button>
+          <button type="button" class="pv-size-btn active" data-kwp="5" style="padding:8px 4px; font-size:12px; font-family:inherit; background:var(--accent); color:var(--bg); border:1px solid var(--accent); border-radius:6px; cursor:pointer; font-weight:600;">5 kWp</button>
+          <button type="button" class="pv-size-btn" data-kwp="7" style="padding:8px 4px; font-size:12px; font-family:inherit; background:rgba(255,255,255,0.04); color:var(--ink); border:1px solid var(--border); border-radius:6px; cursor:pointer;">7 kWp</button>
+          <button type="button" class="pv-size-btn" data-kwp="10" style="padding:8px 4px; font-size:12px; font-family:inherit; background:rgba(255,255,255,0.04); color:var(--ink); border:1px solid var(--border); border-radius:6px; cursor:pointer;">10 kWp</button>
+          <button type="button" class="pv-size-btn" data-kwp="12" style="padding:8px 4px; font-size:12px; font-family:inherit; background:rgba(255,255,255,0.04); color:var(--ink); border:1px solid var(--border); border-radius:6px; cursor:pointer;">12 kWp</button>
+          <button type="button" class="pv-size-btn" data-kwp="custom" style="padding:8px 4px; font-size:11px; font-family:inherit; background:rgba(255,255,255,0.04); color:var(--muted); border:1px solid var(--border); border-radius:6px; cursor:pointer;">Друго…</button>
+        </div>
+        <input id="pv" type="number" value="5" min="0" max="500" step="0.5">
+        <div class="hint">Цена ~ <b><span id="pv-have-price-eur">3.500</span> €</b> (≈ <span id="pv-have-price-mkd">215.250</span> МКД турнкеy)</div>
+      </div>
+
+      <!-- Mode: No PV (auto-sized recommendation) -->
+      <div id="pv-none-block" style="display:none;">
+        <div style="padding:12px 14px; background:linear-gradient(135deg, rgba(255,184,28,0.08), rgba(61,220,151,0.06)); border:1px solid rgba(255,184,28,0.25); border-radius:10px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.8px; color:var(--muted); margin-bottom:6px;">Препорачан PV за твој профил</div>
+          <div style="font-size:22px; font-weight:700; color:var(--accent); line-height:1.1;"><span id="pv-rec-kwp">—</span> <span style="font-size:13px; color:var(--muted); font-weight:400;">kWp</span></div>
+          <div style="font-size:11px; color:var(--muted); margin-top:4px;">за покривање на ~100% од твојата потрошувачка</div>
+          <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); display:flex; justify-content:space-between; gap:8px;">
+            <div>
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase;">Цена</div>
+              <div style="font-size:15px; font-weight:700; color:var(--mint);"><span id="pv-rec-eur">—</span> €</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase;">Во МКД</div>
+              <div style="font-size:15px; font-weight:700; color:var(--mint);"><span id="pv-rec-mkd">—</span></div>
+            </div>
+          </div>
+        </div>
+        <div id="pv-limit-note" style="display:none; margin-top:8px; padding:10px 12px; background:rgba(255,184,28,0.08); border:1px solid rgba(255,184,28,0.3); border-radius:8px; font-size:11.5px; line-height:1.5; color:var(--ink);"></div>
+        <div class="hint" style="margin-top:8px;">Базирано на ~1,100 kWh/kWp за Скопје · законски максимум за домаќинство: 12 kWp панели / 10 kW инвертор</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>🔋 Производител на батерија</label>
+      <select id="battery-brand" style="width:100%; padding:10px 12px; font-family:inherit; font-size:13px; background:rgba(255,255,255,0.04); color:var(--ink); border:1px solid var(--border); border-radius:8px; cursor:pointer;">
+        <option value="felicity" selected>Felicity Solar — реални цени</option>
+        <option value="generic">Генерички LFP — приближни цени</option>
+      </select>
+      <div class="hint" id="brand-hint">Цени од akumulatori.mk · LiFePO4 48V · 6000+ циклуси · гаранција до 10 год.</div>
+    </div>
+
+    <details style="margin-bottom:18px; border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
+      <summary style="cursor:pointer; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:var(--accent);">💰 Финансиски опции</summary>
+      <div style="margin-top:12px;">
+        <div class="field">
+          <label>Субвенција (%)</label>
+          <input id="subsidy" type="number" value="0" min="0" max="80" step="5">
+          <div class="hint">Државно кофинансирање — Мин. економија програми (30-50%)</div>
+        </div>
+        <div class="field">
+          <label>Животен век на батерија (год.)</label>
+          <select id="lifetime" style="width:100%; padding:10px 12px; font-family:inherit; font-size:13px; background:rgba(255,255,255,0.04); color:var(--ink); border:1px solid var(--border); border-radius:8px;">
+            <option value="10" selected>10 год. (гаранција — конзервативно)</option>
+            <option value="15">15 год. (реален век — 6000+ циклуси)</option>
+          </select>
+        </div>
+        <div style="margin-bottom:0; padding:10px 12px; background:rgba(76,194,255,0.06); border:1px solid rgba(76,194,255,0.2); border-radius:8px; font-size:11.5px; color:var(--muted); line-height:1.5;">
+          ℹ️ <b style="color:var(--ink);">Напомена:</b> вердиктот и break-even графиконот сметаат со умерен раст на цените на струја од <b style="color:var(--ink);">~2.5% годишно</b> (EVN покачи 2.5-3.8% во 2026). Црвено се прикажува само ако батеријата не се отплаќа ни за <b style="color:var(--ink);">16 години</b>.</div>
+      </div>
+    </details>
+
+<details style="margin-bottom:18px; border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
+      <summary style="cursor:pointer; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:var(--accent);">⚡ EVN тарифи</summary>
+      <div style="margin-top:12px;">
+        <div class="field">
+          <label>Висока тарифа ВТ (МКД/kWh)</label>
+          <input id="tariff_high" type="number" value="6.3348" min="1" max="25" step="0.0001">
+          <div class="hint">EVN Хоме 2026 — ВТ2 маргинална (211-630 kWh/мес)</div>
+        </div>
+        <div class="field">
+          <label>Ниска тарифа НТ (МКД/kWh)</label>
+          <input id="tariff_low" type="number" value="2.2493" min="1" max="10" step="0.0001">
+          <div class="hint">EVN Хоме 2026 — flat, без блокови</div>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Feed-in (продажба на мрежа, МКД/kWh)</label>
+          <input id="feed_in" type="number" value="1.50" min="0" max="15" step="0.1">
+          <div class="hint">Низок = батеријата вреди повеќе</div>
+        </div>
+      </div>
+    </details>
+
+    <button id="run" class="run-btn">▶ Пресметај препорака</button>
+    <div id="status" class="status"></div>
+  </aside>
+
+  <main>
+    <div class="hero">
+      <h2>Која е оптималната големина на батерија за Вашето домаќинство?</h2>
+      <p>Внесете ја вашата месечна EVN сметка — алгоритамот автоматски го препознава
+      вашиот тарифен блок и прави LP оптимизација за секој кандидат-капацитет
+      (4 сезонски недели × 52): годишна заштеда, период на отплата, NPV и само-потрошувачка.
+      <b style="color:var(--ink);">Цените се реални</b> — Felicity Solar батерии од
+      Battery Evolution (akumulatori.mk), ажурирани јули 2026.</p>
+    </div>
+
+    <div id="results" style="display:none;">
+
+      <!-- ⬇ ТУКА се вметнува ФИНАЛНАТА ПРЕПОРАКА (преместена на врв од JS) -->
+      <div id="rec-slot"></div>
+
+      <!-- No-battery vs Best-battery comparison (додадено за јасност) -->
+      <div id="compare-card" class="chart-card" style="margin-bottom:20px; padding:22px 26px;">
+        <h3 style="font-size:15px; margin-bottom:16px;">⚖️ Без батерија  vs.  Со оптимална батерија</h3>
+        <div class="compare-grid">
+          <div style="padding:18px 20px; background:rgba(255,107,107,0.08); border:1px solid rgba(255,107,107,0.2); border-radius:12px;">
+            <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px;">Без батерија</div>
+            <div style="font-size:22px; font-weight:700; color:#FFB3B3; line-height:1.2;"><span id="cmp-no-cost">—</span> <span style="font-size:13px; color:var(--muted); font-weight:400;">МКД/год</span></div>
+            <div style="font-size:12px; color:var(--muted); margin-top:6px;">годишна сметка за струја</div>
+          </div>
+          <div class="compare-arrow" style="text-align:center; font-size:24px; color:var(--accent);">→</div>
+          <div style="padding:18px 20px; background:rgba(61,220,151,0.08); border:1px solid rgba(61,220,151,0.25); border-radius:12px;">
+            <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px;">Со препорачана батерија (<span id="cmp-best-cap">—</span> kWh)</div>
+            <div style="font-size:22px; font-weight:700; color:#3DDC97; line-height:1.2;"><span id="cmp-with-cost">—</span> <span style="font-size:13px; color:var(--muted); font-weight:400;">МКД/год</span></div>
+            <div style="font-size:12px; color:var(--muted); margin-top:6px;">заштеда: <b id="cmp-save" style="color:var(--mint);">—</b> МКД/год (<span id="cmp-save-pct">—</span>%)</div>
+          </div>
+        </div>
+        <div id="cmp-verdict" style="margin-top:16px; padding:14px 16px; border-radius:10px; font-size:13.5px; line-height:1.6;"></div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric gold">
+          <div class="label">Најбрза отплата</div>
+          <div class="big"><span id="m-payback-val">—</span><span class="unit">год</span></div>
+          <div class="sub">за батерија од <b><span id="m-payback-cap">—</span> kWh</b></div>
+        </div>
+        <div class="metric mint">
+          <div class="label">Макс. годишна заштеда</div>
+          <div class="big"><span id="m-save-val">—</span><span class="unit">МКД</span></div>
+          <div class="sub">за батерија од <b><span id="m-save-cap">—</span> kWh</b></div>
+        </div>
+        <div class="metric sky">
+          <div class="label">Макс. 10-год NPV</div>
+          <div class="big"><span id="m-npv-val">—</span><span class="unit">МКД</span></div>
+          <div class="sub">за батерија од <b><span id="m-npv-cap">—</span> kWh</b></div>
+        </div>
+        <div class="metric rose">
+          <div class="label">Макс. само-потрошувачка</div>
+          <div class="big"><span id="m-self-val">—</span><span class="unit">%</span></div>
+          <div class="sub">за батерија од <b><span id="m-self-cap">—</span> kWh</b></div>
+        </div>
+      </div>
+
+      <div class="charts" style="margin-top:20px">
+        <div class="chart-card">
+          <h3>Период на отплата (години)</h3>
+          <div class="chart-wrap"><canvas id="chart-payback"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>NPV за 10 години (МКД)</h3>
+          <div class="chart-wrap"><canvas id="chart-npv"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Годишна заштеда (МКД)</h3>
+          <div class="chart-wrap"><canvas id="chart-savings"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Само-потрошувачка (%)</h3>
+          <div class="chart-wrap"><canvas id="chart-self"></canvas></div>
+        </div>
+      </div>
+
+      <!-- 📈 Break-even timeline (full width) -->
+      <div class="chart-card" style="margin-top:20px; padding:22px 26px;">
+        <h3 style="font-size:15px; margin-bottom:4px;">📈 Timeline на отплата — кога батеријата ќе ти ги врати парите?</h3>
+        <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">
+          Кумулативна заштеда vs инвестиција за препорачаната батерија (<span id="tl-best-cap">—</span> kWh). Точката каде зелената линија ја пресекува црвената = <b style="color:var(--accent);">break-even</b>.
+        </div>
+        <div class="chart-wrap" style="height:280px;"><canvas id="chart-timeline"></canvas></div>
+        <div id="tl-insight" style="margin-top:14px; padding:12px 14px; background:rgba(61,220,151,0.06); border-radius:8px; font-size:12.5px; line-height:1.6; color:var(--muted);"></div>
+      </div>
+
+      <!-- ФИНАЛНА ПРЕПОРАКА — персонализирана
+           (JS ја преместува во #rec-slot на врвот при секоја пресметка) -->
+      <div id="final-rec" style="margin-top:24px; background:linear-gradient(135deg, rgba(255,184,28,0.12) 0%, rgba(61,220,151,0.08) 100%); border:2px solid var(--accent); border-radius:18px; padding:28px 32px; position:relative; overflow:hidden;">
+        <div style="position:absolute; top:-20px; right:-20px; font-size:140px; opacity:0.06;">🔋</div>
+        <div style="font-size:12px; color:var(--accent); text-transform:uppercase; letter-spacing:1.4px; font-weight:700; margin-bottom:8px;">🎯 Твоја персонализирана препорака</div>
+        <h2 id="rec-headline" style="margin:0 0 14px; font-size:28px; font-weight:700; line-height:1.2; color:var(--ink);">—</h2>
+        <div id="rec-reasoning" style="font-size:14.5px; line-height:1.7; color:var(--muted); margin-bottom:18px;">—</div>
+        <div id="rec-model" style="display:none; font-size:13px; padding:10px 14px; margin-bottom:18px; background:rgba(255,184,28,0.07); border:1px solid rgba(255,184,28,0.25); border-radius:8px; color:var(--ink);"></div>
+        <div id="rec-stats" class="rec-stats-grid">
+          <div style="background:rgba(0,0,0,0.25); padding:14px 16px; border-radius:10px; border-left:3px solid var(--accent);">
+            <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;">Препорачан капацитет</div>
+            <div style="font-size:22px; font-weight:700; color:var(--accent);" id="rec-cap">—</div>
+            <div style="font-size:11px; color:var(--muted);">kWh LFP батерија</div>
+          </div>
+          <div style="background:rgba(0,0,0,0.25); padding:14px 16px; border-radius:10px; border-left:3px solid var(--mint);">
+            <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;">Твоја инвестиција</div>
+            <div style="font-size:22px; font-weight:700; color:var(--mint);" id="rec-invest">—</div>
+            <div style="font-size:11px; color:var(--muted);">МКД еднократно</div>
+          </div>
+          <div style="background:rgba(0,0,0,0.25); padding:14px 16px; border-radius:10px; border-left:3px solid var(--sky);">
+            <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;">Годишна заштеда</div>
+            <div style="font-size:22px; font-weight:700; color:var(--sky);" id="rec-save">—</div>
+            <div style="font-size:11px; color:var(--muted);"><span id="rec-save-month">—</span> МКД/месец</div>
+          </div>
+          <div style="background:rgba(0,0,0,0.25); padding:14px 16px; border-radius:10px; border-left:3px solid var(--rose);">
+            <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;">Отплата</div>
+            <div style="font-size:22px; font-weight:700; color:var(--rose);" id="rec-payback">—</div>
+            <div style="font-size:11px; color:var(--muted);">години</div>
+          </div>
+        </div>
+        <div id="rec-warning" style="margin-top:16px; padding:12px 14px; border-radius:8px; font-size:12.5px; display:none;"></div>
+
+        <!-- Вкупна инвестиција (PV + батерија) — се покажува само ако PV е auto-generiран -->
+        <div id="rec-total-package" style="display:none; margin-top:18px; padding:18px 22px; background:rgba(0,0,0,0.3); border:2px solid var(--mint); border-radius:14px;">
+          <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">📦 Комплетен пакет за тебе (PV + батерија)</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:12px;">
+            <div>
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase;">☀️ PV систем</div>
+              <div style="font-size:16px; font-weight:700; color:var(--accent);"><span id="pkg-pv-kwp">—</span> kWp</div>
+              <div style="font-size:11px; color:var(--muted);"><span id="pkg-pv-cost-eur">—</span> € · <span id="pkg-pv-cost-mkd">—</span> МКД</div>
+            </div>
+            <div>
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase;">🔋 Батерија</div>
+              <div style="font-size:16px; font-weight:700; color:var(--mint);"><span id="pkg-bat-kwh">—</span> kWh</div>
+              <div style="font-size:11px; color:var(--muted);"><span id="pkg-bat-cost-eur">—</span> € · <span id="pkg-bat-cost-mkd">—</span> МКД</div>
+            </div>
+            <div style="border-left:1px solid var(--border); padding-left:14px;">
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase;">💰 Вкупно</div>
+              <div style="font-size:18px; font-weight:700; color:var(--sky);"><span id="pkg-total-eur">—</span> €</div>
+              <div style="font-size:12px; color:var(--muted);"><span id="pkg-total-mkd">—</span> МКД</div>
+            </div>
+          </div>
+          <div style="font-size:12px; color:var(--muted); line-height:1.6; padding-top:10px; border-top:1px dashed var(--border);">
+            <span id="pkg-breakeven">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-card" style="margin-top:20px">
+        <h3>Детални резултати</h3>
+        <table id="results-table">
+          <thead>
+            <tr>
+              <th>Kапацитет</th>
+              <th>Инвестиција</th>
+              <th>Заштеда/год</th>
+              <th>Отплата</th>
+              <th>NPV 10г</th>
+              <th>Само-потр.</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="empty" class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="6" y="7" width="12" height="11" rx="2"/>
+        <path d="M9 7V5a3 3 0 0 1 6 0v2"/>
+        <path d="M10 13h4"/>
+      </svg>
+      <div>Внесете параметри и кликнете <b>Пресметај препорака</b></div>
+      <div style="font-size:12px; margin-top:6px;">~30-60 секунди за комплетен sweep</div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+const API_URL = "http://127.0.0.1:5002/api/sizing";
+const CENI_URL = "http://127.0.0.1:5002/api/ceni";
+
+// ===== ЕДЕН ИЗВОР НА ВИСТИНА =====
+// При вчитување ги земаме СИТЕ цени од config.py преку /api/ceni.
+// Така, ако смениш цена во config.py → автоматски се менува и тука.
+// (Вредностите подолу се само fallback ако серверот не е достапен.)
+async function vcitajCeniOdServer() {
+  try {
+    const r = await fetch(CENI_URL);
+    if (!r.ok) return;
+    const c = await r.json();
+
+    // Батерии — домаќинства
+    if (c.baterii) {
+      BATTERY_BRANDS.felicity.prices = {};
+      for (const [kwh, cena] of Object.entries(c.baterii)) {
+        BATTERY_BRANDS.felicity.prices[Number(kwh)] = cena;
+      }
+    }
+    // Батерии — бизнис
+    if (c.baterii_biznis) {
+      for (const k of Object.keys(BUSINESS_BATTERY_PRICES_MKD)) {
+        delete BUSINESS_BATTERY_PRICES_MKD[k];
+      }
+      for (const [kwh, cena] of Object.entries(c.baterii_biznis)) {
+        BUSINESS_BATTERY_PRICES_MKD[Number(kwh)] = cena;
+      }
+    }
+    // Имиња на моделите
+    if (c.baterii_modeli) {
+      BATTERY_BRANDS.felicity.models = {};
+      for (const [kwh, ime] of Object.entries(c.baterii_modeli)) {
+        BATTERY_BRANDS.felicity.models[Number(kwh)] = ime;
+      }
+    }
+    // Линкови до понудите
+    if (c.baterii_linkovi) {
+      BATTERY_BRANDS.felicity.linkovi = {};
+      for (const [kwh, url] of Object.entries(c.baterii_linkovi)) {
+        BATTERY_BRANDS.felicity.linkovi[Number(kwh)] = url;
+      }
+      BATTERY_BRANDS.felicity.katalog = c.katalog_url;
+    }
+    // PV цени
+    if (c.pv_ceni_eur) {
+      for (const k of Object.keys(PV_PRESET_PRICES_EUR)) delete PV_PRESET_PRICES_EUR[k];
+      for (const [kwp, eur] of Object.entries(c.pv_ceni_eur)) {
+        PV_PRESET_PRICES_EUR[Number(kwp)] = eur;
+      }
+    }
+    if (c.pv_ceni_biznis_eur) {
+      for (const k of Object.keys(BUSINESS_PV_PRICES_EUR)) delete BUSINESS_PV_PRICES_EUR[k];
+      for (const [kwp, eur] of Object.entries(c.pv_ceni_biznis_eur)) {
+        BUSINESS_PV_PRICES_EUR[Number(kwp)] = eur;
+      }
+    }
+    // Законски лимити (Македонија)
+    if (c.pv_max_kwp) PV_MAX_KWP = c.pv_max_kwp;
+    if (c.invertor_max_kw) INVERTOR_MAX_KW = c.invertor_max_kw;
+
+    if (typeof updatePvHavePrice === 'function') updatePvHavePrice();
+    if (typeof pvMode !== 'undefined' && pvMode === 'none') recomputePvRecommendation();
+  } catch (e) {
+    console.warn('Цените не се вчитани од серверот — користам локални:', e.message);
+  }
+}
+
+// Preset-и по МЕСЕЧНА СМЕТКА (целна група на фирмата: 10-12.000 МКД)
+const PRESETS = {
+  small: {bill:6000,  pv:7},
+  avg:   {bill:10000, pv:10},
+  large: {bill:12000, pv:12},
+};
+
+// Presets
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const p = PRESETS[btn.dataset.preset];
+    document.getElementById('bill').value = p.bill;
+    document.getElementById('pv').value = p.pv;
+    recalcFromBill(p.bill);
+    // Ако нема PV → пресметај ја препорачаната големина за новата потрошувачка
+    if (typeof pvMode !== 'undefined' && pvMode === 'none'
+        && typeof recomputePvRecommendation === 'function') {
+      recomputePvRecommendation();
+    } else if (typeof updatePvHavePrice === 'function') {
+      updatePvHavePrice();
+    }
+  });
+});
+// Otstrani "active" koga korisnicata raсno menuva
+['load', 'pv'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  });
+});
+
+// ===== PV SYSTEM MODE TOGGLE + AUTO-SIZING =====
+// Sizing constants (може да се променат ако сакаш)
+const PV_YIELD_KWH_PER_KWP = 1100;   // Скопје просек (PVGIS податоци)
+const PV_PRICE_EUR_PER_KWP = 640;    // 6,400€ / 10 kWp турнкеy (просечно)
+const PV_TARGET_COVERAGE = 1.00;     // 100% од годишна потрошувачка
+
+// ⚖️ Законски лимити за домаќинства во Македонија (се превземаат од config.py)
+let PV_MAX_KWP = 12.0;          // максимум панели за домаќинство
+let INVERTOR_MAX_KW = 10.0;     // максимум моќност на инвертор
+const MKD_PER_EUR_PV = 61.5;
+
+// Преset цени по PV големина (€/kWp може да варира со economies of scale)
+// Корисникот подоцна може да ги мени
+const PV_PRESET_PRICES_EUR = {
+  3:  2400,   //  800 €/kWp (мал систем)
+  5:  3500,   //  700 €/kWp
+  7:  4500,   //  643 €/kWp
+  10: 6400,   //  640 €/kWp (референца)
+  12: 7500,   //  625 €/kWp (МАКСИМУМ за домаќинство — законски лимит)
+};
+
+// ===== БРЕНДОВИ НА БАТЕРИИ — реални цени од македонскиот пазар =====
+// Felicity Solar: реални цени од akumulatori.mk (Центар за акумулатори), јули 2026
+//   LiFePO4 48V · DoD 90% · 6000+ циклуси · гаранција 5-10 год.
+// Генерички: приближни пазарни вредности (за споредба)
+const BATTERY_BRANDS = {
+  felicity: {
+    label: "Felicity Solar (реални цени — akumulatori.mk)",
+    source: "akumulatori.mk · јули 2026",
+    // ⚠ Овие вредности се само FALLBACK — при отворање се преземаат
+    // вистинските од config.py преку /api/ceni (види vcitajCeniOdServer).
+    models: {
+      5:  "5.12 kWh 48V",
+      10: "10 kWh 48V",
+      16: "16 kWh 48V",
+      20: "20 kWh (2× 10 kWh)",
+      32: "32 kWh (2× 16 kWh)",
+    },
+    prices: {
+      5:   66500,
+      10: 126000,
+      16: 141450,
+      20: 252000,
+      32: 282900,
+    },
+    // Директни линкови до понудата (Battery Evolution / akumulatori.mk)
+    linkovi: {
+      5:  "https://akumulatori.mk/felicity-solar-%D0%BB%D0%B8%D1%82%D0%B8%D1%83%D0%BC-5-kwh-48-v",
+      10: "https://akumulatori.mk/felicity-solar-%D0%BB%D0%B8%D1%82%D0%B8%D1%83%D0%BC-10-kwh-48-v-2",
+      16: "https://akumulatori.mk/felicity-solar",
+      20: "https://akumulatori.mk/felicity-solar-%D0%BB%D0%B8%D1%82%D0%B8%D1%83%D0%BC-20-kwh-48-v",
+      32: "https://akumulatori.mk/felicity-solar",
+    },
+    katalog: "https://akumulatori.mk/felicity-solar",
+  },
+  generic: {
+    label: "Генерички LFP (приближни цени)",
+    source: "пазарен просек",
+    models: {},
+    prices: {
+      3:  35000,
+      5:  58000,
+      7:  82000,
+      10: 117000,
+      13: 150000,
+      15: 175000,
+      20: 230000,
+    },
+  },
+};
+
+// Тековно избран бренд (се менува преку dropdown во формата)
+let selectedBrand = 'felicity';
+
+// ===== РЕЖИМ: Домаќинство vs Бизнис =====
+// Бизнис = „мали потрошувачи" на универзален снабдувач (EVN Хоме 2026):
+//   FLAT тарифа 17.2833 ден/kWh (нема ВТ/НТ!) + мрежарина LV1.2 = 0.7167
+//   → вредноста на батеријата кај фирми е МАКСИМИЗАЦИЈА НА САМО-ПОТРОШУВАЧКА
+//     (секој kWh од батерија заменува увоз од ~18 ден!)
+let appMode = 'home';  // 'home' | 'business'
+
+const BUSINESS_TARIFF = { high: 17.2833, low: 17.2833, feedIn: 1.50 };
+
+// Felicity stack-ови за бизниси (реални цени на модули, akumulatori.mk)
+const BUSINESS_BATTERY_PRICES_MKD = {
+  20:  350510,
+  40:  701026,
+  60:  1051540,
+  80:  1402052,
+  120: 2103078,
+};
+
+// Комерцијални PV цени (€, турнкеy ~530-590 €/kWp)
+const BUSINESS_PV_PRICES_EUR = {
+  20:  11800,
+  30:  17100,
+  50:  27500,
+  100: 53000,
+};
+
+function getBrandPrices() {
+  if (appMode === 'business') return BUSINESS_BATTERY_PRICES_MKD;
+  return BATTERY_BRANDS[selectedBrand].prices;
+}
+
+// Пресметај цена за било кој kWp (linear interp / extrapolация од preset-ите)
+function pvPriceForKwp(kwp) {
+  const TABLE = appMode === 'business' ? BUSINESS_PV_PRICES_EUR : PV_PRESET_PRICES_EUR;
+  if (TABLE[kwp]) return TABLE[kwp];
+  const PV_PRESET_PRICES_EUR_ACTIVE = TABLE;
+  if (PV_PRESET_PRICES_EUR_ACTIVE[kwp]) return PV_PRESET_PRICES_EUR_ACTIVE[kwp];
+  const sizes = Object.keys(TABLE).map(Number).sort((a, b) => a - b);
+  // Под најмалата → линеарно скалирано
+  if (kwp <= sizes[0]) return kwp * (TABLE[sizes[0]] / sizes[0]);
+  // Над најголемата → линеарно скалирано
+  if (kwp >= sizes[sizes.length - 1]) {
+    const last = sizes[sizes.length - 1];
+    return kwp * (TABLE[last] / last);
+  }
+  // Меѓу два preset-а → линеарна интерполација
+  for (let i = 0; i < sizes.length - 1; i++) {
+    const lo = sizes[i], hi = sizes[i + 1];
+    if (kwp >= lo && kwp <= hi) {
+      const frac = (kwp - lo) / (hi - lo);
+      return TABLE[lo] + frac * (TABLE[hi] - TABLE[lo]);
+    }
+  }
+  return kwp * PV_PRICE_EUR_PER_KWP;
+}
+
+// Update на price-hint под PV input-от
+function updatePvHavePrice() {
+  const kwp = parseFloat(document.getElementById('pv').value) || 0;
+  const priceEur = pvPriceForKwp(kwp);
+  const priceMkd = priceEur * MKD_PER_EUR_PV;
+  document.getElementById('pv-have-price-eur').textContent =
+    new Intl.NumberFormat('mk-MK', {maximumFractionDigits:0}).format(priceEur);
+  document.getElementById('pv-have-price-mkd').textContent =
+    new Intl.NumberFormat('mk-MK', {maximumFractionDigits:0}).format(priceMkd);
+}
+
+// Highlight на активното preset копче (или ниедно ако вредноста е custom)
+function highlightPvSizeBtn(activeKwp) {
+  document.querySelectorAll('.pv-size-btn').forEach(btn => {
+    const matches = btn.dataset.kwp === String(activeKwp);
+    if (matches) {
+      btn.classList.add('active');
+      btn.style.background = 'var(--accent)';
+      btn.style.color = 'var(--bg)';
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.fontWeight = '600';
+    } else {
+      btn.classList.remove('active');
+      btn.style.background = 'rgba(255,255,255,0.04)';
+      btn.style.color = btn.dataset.kwp === 'custom' ? 'var(--muted)' : 'var(--ink)';
+      btn.style.borderColor = 'var(--border)';
+      btn.style.fontWeight = '400';
+    }
+  });
+}
+
+// PV size preset копчиња → клик
+document.querySelectorAll('.pv-size-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const v = btn.dataset.kwp;
+    if (v === 'custom') {
+      // Само го фокусира input-от за рачно внесување
+      document.getElementById('pv').focus();
+      highlightPvSizeBtn('custom');
+    } else {
+      document.getElementById('pv').value = v;
+      highlightPvSizeBtn(v);
+      updatePvHavePrice();
+    }
+  });
+});
+
+// При рачна промена на input-от → ажурирај price hint и highlight
+document.getElementById('pv').addEventListener('input', () => {
+  const v = document.getElementById('pv').value;
+  highlightPvSizeBtn(v);  // ако се совпаѓа со preset → highlight
+  updatePvHavePrice();
+});
+
+// Иницијален update
+updatePvHavePrice();
+
+let pvMode = 'have';  // 'have' | 'none'
+
+function recomputePvRecommendation() {
+  const loadKwh = parseFloat(document.getElementById('load').value) || 10000;
+  // Target kWp = load × coverage ÷ yield_per_kWp
+  const targetKwp = (loadKwh * PV_TARGET_COVERAGE) / PV_YIELD_KWH_PER_KWP;
+  // Закруглен на 0.5 kWp (реални панел-количества)
+  let roundedKwp = Math.round(targetKwp * 2) / 2;
+
+  // ⚖️ ЗАКОНСКИ ЛИМИТ (Македонија): домаќинство смее максимум 12 kWp панели
+  // и инвертор до 10 kW. Ако пресметката бара повеќе → ограничи.
+  const ogranicen = (appMode !== 'business') && (roundedKwp > PV_MAX_KWP);
+  if (ogranicen) roundedKwp = PV_MAX_KWP;
+
+  const priceEur = pvPriceForKwp(roundedKwp);
+  const priceMkd = priceEur * MKD_PER_EUR_PV;
+
+  // Порака ако лимитот е достигнат
+  const limitEl = document.getElementById('pv-limit-note');
+  if (limitEl) {
+    if (ogranicen) {
+      const pokritie = (roundedKwp * PV_YIELD_KWH_PER_KWP / loadKwh * 100).toFixed(0);
+      limitEl.innerHTML =
+        `⚖️ Ограничено на <b>${PV_MAX_KWP} kWp</b> — законски максимум за домаќинства ` +
+        `(инвертор до ${INVERTOR_MAX_KW} kW). Покрива ~<b>${pokritie}%</b> од потрошувачката; ` +
+        `остатокот се дополнува од мрежа.`;
+      limitEl.style.display = 'block';
+    } else {
+      limitEl.style.display = 'none';
+    }
+  }
+
+  document.getElementById('pv-rec-kwp').textContent = roundedKwp.toFixed(1);
+  document.getElementById('pv-rec-eur').textContent =
+    new Intl.NumberFormat('mk-MK', {maximumFractionDigits:0}).format(priceEur);
+  document.getElementById('pv-rec-mkd').textContent =
+    new Intl.NumberFormat('mk-MK', {maximumFractionDigits:0}).format(priceMkd);
+
+  // SINK: ажурирај го скриениот #pv input (за да runSizing го испрати токот)
+  document.getElementById('pv').value = roundedKwp;
+  return {kwp: roundedKwp, priceEur, priceMkd};
+}
+
+function setPvMode(mode) {
+  pvMode = mode;
+  const haveBlock = document.getElementById('pv-have-block');
+  const noneBlock = document.getElementById('pv-none-block');
+  document.querySelectorAll('.pv-tab').forEach(tab => {
+    if (tab.dataset.mode === mode) {
+      tab.classList.add('active');
+      tab.style.background = 'var(--accent)';
+      tab.style.color = 'var(--bg)';
+      tab.style.borderColor = 'var(--accent)';
+      tab.style.fontWeight = '600';
+    } else {
+      tab.classList.remove('active');
+      tab.style.background = 'rgba(255,255,255,0.04)';
+      tab.style.color = 'var(--ink)';
+      tab.style.borderColor = 'var(--border)';
+      tab.style.fontWeight = '400';
+    }
+  });
+  if (mode === 'have') {
+    haveBlock.style.display = '';
+    noneBlock.style.display = 'none';
+  } else {
+    haveBlock.style.display = 'none';
+    noneBlock.style.display = '';
+    recomputePvRecommendation();
+  }
+}
+document.querySelectorAll('.pv-tab').forEach(tab =>
+  tab.addEventListener('click', () => setPvMode(tab.dataset.mode)));
+
+// Кога се менува load во „Немам PV" mode → пресметај повторно
+document.getElementById('load').addEventListener('input', () => {
+  if (pvMode === 'none') recomputePvRecommendation();
+});
+
+// ⚖️ Валидација: домаќинство не смее да внесе PV над законскиот лимит
+document.getElementById('pv').addEventListener('change', (e) => {
+  const v = parseFloat(e.target.value) || 0;
+  if (appMode !== 'business' && v > PV_MAX_KWP) {
+    e.target.value = PV_MAX_KWP;
+    const hint = document.querySelector('#pv-have-block .hint');
+    if (hint) {
+      hint.innerHTML = `⚠️ <b style="color:var(--accent);">Ограничено на ${PV_MAX_KWP} kWp</b> — ` +
+        `законски максимум за домаќинства во Македонија (инвертор до ${INVERTOR_MAX_KW} kW).`;
+      setTimeout(() => { if (typeof updatePvHavePrice === 'function') updatePvHavePrice(); }, 4000);
+    }
+    if (typeof updatePvHavePrice === 'function') updatePvHavePrice();
+  }
+});
+
+// ===== МЕСЕЧНА СМЕТКА → kWh + АВТОМАТСКИ ТАРИФЕН БЛОК (EVN Хоме 2026) =====
+// Точна инверзна пресметка низ блок-структурата:
+//   сметка = ВТ_блокови(50% од kWh) + НТ·(50%) + мрежарина·(100%)
+// Потоа МАРГИНАЛНИОТ блок се поставува како ВТ цена — затоа што батеријата
+// ги заменува најскапите kWh (largest block reached).
+const EVN_BLOCKS = [[210, 5.0502], [630, 6.3348], [1050, 8.4573], [Infinity, 20.8300]];
+const EVN_NT = 2.2493, EVN_FEE = 2.0339;
+// ⚠ ВТ уделот НЕ е 50%! Вечерниот пик (18-22ч) паѓа во ВТ часовите.
+// Измерено од реалниот load профил: 57.1% (мора да е исто како config.VT_UDEL)
+const VT_SHARE = 0.571;
+
+function monthlyCostForKwh(m) {
+  const v = m * VT_SHARE;  // ВТ дел
+  let cost = 0, prev = 0, rem = v;
+  for (const [limit, rate] of EVN_BLOCKS) {
+    const size = Math.min(rem, limit - prev);
+    if (size <= 0) break;
+    cost += size * rate;
+    rem -= size; prev = limit;
+  }
+  return cost + (m - v) * EVN_NT + m * EVN_FEE;
+}
+
+function marginalBlock(monthlyVtKwh) {
+  if (monthlyVtKwh <= 210) return {n: 1, rate: 5.0502};
+  if (monthlyVtKwh <= 630) return {n: 2, rate: 6.3348};
+  if (monthlyVtKwh <= 1050) return {n: 3, rate: 8.4573};
+  return {n: 4, rate: 20.8300};
+}
+
+function recalcFromBill(bill) {
+  if (!bill || bill <= 0) return;
+  if (appMode === 'business') {
+    // Бизнис: FLAT тарифа (17.2833 + 0.7167 мрежарина) → проста инверзија.
+    // Нема блокови, нема ВТ/НТ — иста цена за сите часови.
+    const cenaPoKwh = 17.2833 + 0.7167;
+    const annualKwh = Math.round(bill / cenaPoKwh * 12 / 500) * 500;
+    document.getElementById('load').value = annualKwh;
+    document.getElementById('bill-hint').innerHTML =
+      `≈ <b>${annualKwh.toLocaleString('mk-MK')} kWh/год</b> · ` +
+      `<b style="color:var(--accent);">FLAT ${cenaPoKwh.toFixed(2)} МКД/kWh</b> — без блокови, без ВТ/НТ`;
+    return;
+  }
+  // Бисекција: најди месечен kWh чија сметка = bill
+  let lo = 50, hi = 10000;
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    if (monthlyCostForKwh(mid) < bill) lo = mid; else hi = mid;
+  }
+  const monthlyKwh = (lo + hi) / 2;
+  const annualKwh = Math.round(monthlyKwh * 12 / 100) * 100;
+  document.getElementById('load').value = annualKwh;
+
+  // Автоматски маргинален блок → ВТ цена
+  const blk = marginalBlock(monthlyKwh * VT_SHARE);
+  document.getElementById('tariff_high').value = blk.rate;
+  document.getElementById('bill-hint').innerHTML =
+    `≈ <b>${annualKwh.toLocaleString('mk-MK')} kWh/год</b> · маргинален блок: <b style="color:var(--accent);">ВТ${blk.n} (${blk.rate.toFixed(4)} МКД)</b> — автоматски поставено`;
+}
+
+document.getElementById('bill').addEventListener('input', (e) => {
+  recalcFromBill(parseFloat(e.target.value));
+  // Ако е во режим „Немам PV" → пресметај го автоматскиот PV повторно,
+  // бидејќи новата сметка значи нова потрошувачка → друга големина на PV.
+  if (typeof pvMode !== 'undefined' && pvMode === 'none'
+      && typeof recomputePvRecommendation === 'function') {
+    recomputePvRecommendation();
+  }
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+});
+
+// Charts
+const charts = {};
+function mkChart(id, label, color) {
+  const ctx = document.getElementById(id).getContext('2d');
+  return new Chart(ctx, {
+    type:'bar',
+    data:{labels:[], datasets:[{label, data:[], backgroundColor:color, borderRadius:6}]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#A9B7D0'}, grid:{display:false}},
+        y:{ticks:{color:'#A9B7D0'}, grid:{color:'rgba(255,255,255,0.05)'}}
+      }
+    }
+  });
+}
+
+function formatMKD(n){
+  return new Intl.NumberFormat('mk-MK', {maximumFractionDigits:0}).format(n);
+}
+
+// Override на инвестиција/payback/NPV користејќи цени по капацитет од табелата
+function applyPriceTableOverrides(data, priceTable) {
+  const DISCOUNT = 0.05;        // 5% годишна стапка на дисконт
+
+  // Финансиски опции од формата (субвенција, животен век)
+  const subsidyPct = (parseFloat(document.getElementById('subsidy').value) || 0) / 100;
+  const lifetimeYears = parseInt(document.getElementById('lifetime').value) || 10;
+
+  data.rows.forEach(r => {
+    if (r.capacity_kwh === 0) {
+      r.investment_mkd = 0;
+      r.payback_years = null;
+      r.npv_10yr_mkd = 0;
+      return;
+    }
+    const fullPrice = priceTable[r.capacity_kwh];
+    if (fullPrice == null) return;  // безбедност — ако нема цена, не пипај
+    const inv = fullPrice * (1 - subsidyPct);   // ефективна инвестиција по субвенција
+    const save = r.annual_savings_mkd || 0;
+    r.investment_mkd = inv;
+    r.payback_years = save > 1 ? inv / save : Infinity;
+    // NPV = Σ (save / (1+r)^t) − inv, за избран животен век
+    let discSum = 0;
+    for (let t = 1; t <= lifetimeYears; t++) {
+      discSum += save / Math.pow(1 + DISCOUNT, t);
+    }
+    r.npv_10yr_mkd = discSum - inv;
+  });
+
+  // Re-пресметај препораки (тие зависат од NPV/payback кои се override-ани)
+  const valid = data.rows.filter(r => r.capacity_kwh > 0);
+  const finitePB = valid.filter(r => isFinite(r.payback_years));
+  const recs = data.recommendations || (data.recommendations = {});
+  if (finitePB.length) {
+    const fastest = finitePB.reduce((a, b) => a.payback_years < b.payback_years ? a : b);
+    recs.fastest_payback_kwh = fastest.capacity_kwh;
+    recs.fastest_payback_years = fastest.payback_years;
+  } else {
+    recs.fastest_payback_kwh = null;
+    recs.fastest_payback_years = null;
+  }
+  if (valid.length) {
+    const maxSave = valid.reduce((a, b) => a.annual_savings_mkd > b.annual_savings_mkd ? a : b);
+    const maxNpv  = valid.reduce((a, b) => a.npv_10yr_mkd > b.npv_10yr_mkd ? a : b);
+    const maxSelf = valid.reduce((a, b) => a.self_consumption_pct > b.self_consumption_pct ? a : b);
+    recs.max_savings_kwh = maxSave.capacity_kwh;
+    recs.max_savings_mkd = maxSave.annual_savings_mkd;
+    recs.max_npv_kwh = maxNpv.capacity_kwh;
+    recs.max_npv_mkd = maxNpv.npv_10yr_mkd;
+    recs.max_self_consumption_kwh = maxSelf.capacity_kwh;
+    recs.max_self_consumption_pct = maxSelf.self_consumption_pct;
+  }
+}
+
+async function runSizing() {
+  const btn = document.getElementById('run');
+  const status = document.getElementById('status');
+  const empty = document.getElementById('empty');
+  const results = document.getElementById('results');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Се пресметува…';
+  status.className = 'status show loading';
+  status.innerHTML = '<span class="spin"></span> LP оптимизација во тек (30-60 сек)…';
+
+  // Користи цени од избраниот бренд (Felicity Solar = реални цени)
+  // Се прикажуваат во резултатите, не во формата
+  const priceTable = { ...getBrandPrices() };
+  // capacities = 0 (без батерија) + сите од избраниот бренд
+  const caps = [0, ...Object.keys(priceTable).map(Number).sort((a, b) => a - b)];
+  // Бекендот сè уште бара price-per-kWh; пресметај просек за сметање (ќе го override-а frontend-от)
+  const capsArr = Object.keys(priceTable).map(Number);
+  const priceValues = Object.values(priceTable);
+  const avgPricePerKwh = priceValues.length
+    ? priceValues.reduce((s, p, i) => s + p / capsArr[i], 0) / priceValues.length
+    : 11685;
+
+  // 4-те сезонски сметки (ако корисникот ги внел — поточна пресметка!)
+  const smetki = {
+    mart:      parseFloat(document.getElementById('smetka-mart').value) || 0,
+    juni:      parseFloat(document.getElementById('smetka-juni').value) || 0,
+    septemvri: parseFloat(document.getElementById('smetka-septemvri').value) || 0,
+    dekemvri:  parseFloat(document.getElementById('smetka-dekemvri').value) || 0,
+  };
+
+  const payload = {
+    load: parseFloat(document.getElementById('load').value),
+    pv: parseFloat(document.getElementById('pv').value),
+    mode: appMode,                                        // 'home' | 'business'
+    greenje: document.getElementById('greenje').value,   // тип на греење
+    smetki: smetki,                                       // 4 сезонски сметки
+    price: avgPricePerKwh,  // placeholder — ќе биде override-ан во frontend
+    tariff_high: parseFloat(document.getElementById('tariff_high').value),
+    tariff_low:  parseFloat(document.getElementById('tariff_low').value),
+    feed_in:     parseFloat(document.getElementById('feed_in').value),
+    caps: caps,
+  };
+
+  try {
+    const r = await fetch(API_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    // OVERRIDE на инвестиција/payback/NPV користејќи ја корисничката табела
+    applyPriceTableOverrides(data, priceTable);
+    render(data);
+
+    // Премести ја ФИНАЛНАТА ПРЕПОРАКА на самиот врв од резултатите —
+    // тоа е најважното што корисникот треба веднаш да го види.
+    const slot = document.getElementById('rec-slot');
+    const rec = document.getElementById('final-rec');
+    if (slot && rec && rec.parentElement !== slot) {
+      rec.style.marginTop = '0';
+      rec.style.marginBottom = '24px';
+      slot.appendChild(rec);
+    }
+
+    status.className = 'status';
+    empty.style.display = 'none';
+    results.style.display = 'block';
+  } catch (e) {
+    status.className = 'status show error';
+    status.textContent = '✗ Грешка: ' + e.message
+      + ' — провери дека api.py работи на port 5001';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Пресметај препорака';
+  }
+}
+
+function render(data) {
+  if (!data || !Array.isArray(data.rows) || data.rows.length === 0) {
+    document.getElementById('status').className = 'status show error';
+    document.getElementById('status').textContent = '✗ Нема резултати од серверот';
+    return;
+  }
+  const rows = data.rows.filter(r => r.capacity_kwh > 0);
+  const rec = data.recommendations || {};
+
+  // Metric tiles
+  const set = (id, val) => document.getElementById(id).textContent = val;
+  const numOrDash = (v, d=0) => (v == null || Number.isNaN(v)) ? '—' : Number(v).toFixed(d);
+  const moneyOrDash = v => (v == null || Number.isNaN(v)) ? '—' : formatMKD(v);
+
+  set('m-payback-cap', numOrDash(rec.fastest_payback_kwh, 0));
+  set('m-payback-val', numOrDash(rec.fastest_payback_years, 1));
+  set('m-save-cap',    numOrDash(rec.max_savings_kwh, 0));
+  set('m-save-val',    moneyOrDash(rec.max_savings_mkd));
+  set('m-npv-cap',     numOrDash(rec.max_npv_kwh, 0));
+  set('m-npv-val',     moneyOrDash(rec.max_npv_mkd));
+  set('m-self-cap',    numOrDash(rec.max_self_consumption_kwh, 0));
+  set('m-self-val',    numOrDash(rec.max_self_consumption_pct, 1));
+
+  // ----- Споредба "Без батерија" vs "Со оптимална батерија" -----
+  // Без батерија = редот со capacity_kwh == 0
+  const noBat = data.rows.find(r => r.capacity_kwh === 0);
+  // "Оптимална" = онаа со најдобар NPV (ако сите NPV-и се негативни, избери најмала негативна загуба
+  //  но сепак со реална заштеда — дај ѝ на препораката од backend приоритет)
+  const optCap = rec.max_npv_kwh ?? rec.fastest_payback_kwh;
+  const optRow = data.rows.find(r => r.capacity_kwh === optCap);
+  if (noBat && optRow) {
+    const noCost = noBat.annual_cost_with_battery_mkd;  // == baseline
+    const withCost = optRow.annual_cost_with_battery_mkd;
+    const save = noCost - withCost;
+    const savePct = noCost > 0 ? (save / noCost * 100) : 0;
+    set('cmp-no-cost',   formatMKD(noCost));
+    set('cmp-with-cost', formatMKD(withCost));
+    set('cmp-best-cap',  optCap);
+    set('cmp-save',      formatMKD(save));
+    set('cmp-save-pct',  savePct.toFixed(1));
+
+    // Verdict пораки
+    const inv = optRow.investment_mkd;
+    const npv = optRow.npv_10yr_mkd;
+    const payb = optRow.payback_years;
+    let msg = '';
+    let bg = 'rgba(61,220,151,0.08)', border = 'rgba(61,220,151,0.25)', color = '#3DDC97';
+    if (save > 0 && npv > 0) {
+      msg = `✅ <b>Батеријата се исплати.</b> За ${optCap} kWh LFP систем (~${formatMKD(inv)} МКД инвестиција), `
+          + `годишно заштедувате ${formatMKD(save)} МКД (${savePct.toFixed(1)}%). `
+          + `Период на отплата: ~${payb ? payb.toFixed(1) : '—'} години. `
+          + `10-год. NPV: <b>+${formatMKD(npv)} МКД</b> — нето добивка по дисконтирање.`;
+    } else if (save > 0 && npv <= 0) {
+      msg = `⚠️ <b>Батеријата ја намалува сметката</b>, но инвестицијата сè уште не се отплаќа целосно за 10 год. `
+          + `Годишна заштеда: ${formatMKD(save)} МКД (${savePct.toFixed(1)}%), но NPV = ${formatMKD(npv)} МКД. `
+          + `Препорака: или чекај намалување на цената, или разгледај помал капацитет со побрза отплата.`;
+      bg = 'rgba(255,184,28,0.08)'; border = 'rgba(255,184,28,0.3)'; color = '#FFB81C';
+    } else {
+      msg = `❌ Со тековните параметри батеријата <b>не носи значајна заштеда</b>. `
+          + `Провери ги тарифите и потрошувачката — ако feed-in ≈ увоз, батеријата нема економска смисла.`;
+      bg = 'rgba(255,107,107,0.08)'; border = 'rgba(255,107,107,0.25)'; color = '#FF6B6B';
+    }
+    const v = document.getElementById('cmp-verdict');
+    v.style.background = bg; v.style.border = `1px solid ${border}`; v.style.color = color;
+    v.innerHTML = msg;
+  }
+
+  // Charts
+  const labels = rows.map(r => r.capacity_kwh + ' kWh');
+
+  const paybackData = rows.map(r => r.payback_years ?? 30);
+  const npvData = rows.map(r => r.npv_10yr_mkd);
+  const saveData = rows.map(r => r.annual_savings_mkd);
+  const selfData = rows.map(r => r.self_consumption_pct);
+
+  const specs = [
+    ['chart-payback', 'Отплата (год)', '#FFB81C', paybackData],
+    ['chart-npv',     'NPV (МКД)',      '#4CC2FF', npvData],
+    ['chart-savings', 'Заштеда (МКД)',  '#3DDC97', saveData],
+    ['chart-self',    'Само-потр. (%)', '#FF6B6B', selfData],
+  ];
+  specs.forEach(([id, label, color, d]) => {
+    if (charts[id]) charts[id].destroy();
+    charts[id] = mkChart(id, label, color);
+    charts[id].data.labels = labels;
+    charts[id].data.datasets[0].data = d;
+    charts[id].update();
+  });
+
+  // ----- ФИНАЛНА ПЕРСОНАЛИЗИРАНА ПРЕПОРАКА -----
+  // Логика РАЗДВОЕНА во 2 дела:
+  //   (A) КАПАЦИТЕТ = техничка препорака, НЕ зависи од цена.
+  //       Базирана на "elbow" на заштеди-кривата (diminishing returns).
+  //   (B) ВЕРДИКТ = економска проценка, зависи од внесена цена.
+  //       "Се исплати сега" vs "Почекај цените да паднат".
+  //
+  // Така корисникот може да експериментира со цена без препораката да флипнува.
+  const candidates = data.rows.filter(r => r.capacity_kwh > 0);
+  const sortedByCap = [...candidates].sort((a, b) => a.capacity_kwh - b.capacity_kwh);
+
+  // (A) TECHNICAL: Elbow detection на annual_savings_mkd vs capacity
+  // Продолжи да растеш додека маргиналната заштеда по kWh е >= 60% од почетната маргинална.
+  // (Заштедата не зависи од цена на батерија — само од load/PV/тарифи)
+  let best = sortedByCap[0];
+  if (sortedByCap.length >= 2) {
+    const firstDelta = (sortedByCap[1].annual_savings_mkd - sortedByCap[0].annual_savings_mkd)
+                      // Math.max(0.001, sortedByCap[1].capacity_kwh - sortedByCap[0].capacity_kwh);
+    const threshold = firstDelta * 0.6;  // 60% od pocetniot marginal
+    for (let i = 1; i < sortedByCap.length; i++) {
+      const prev = sortedByCap[i - 1];
+      const curr = sortedByCap[i];
+      const deltaPerKwh = (curr.annual_savings_mkd - prev.annual_savings_mkd)
+                        // Math.max(0.001, curr.capacity_kwh - prev.capacity_kwh);
+      if (deltaPerKwh >= threshold) {
+        best = curr;
+      } else {
+        break;  // diminishing returns → sweet spot e pronajden
+      }
+    }
+  }
+
+  const userLoad = data.inputs.load;
+  const userPv = data.inputs.pv;
+  const userPrice = data.inputs.price;
+  const bill = parseFloat(document.getElementById('bill').value) || null;
+  const saveMonth = best.annual_savings_mkd / 12;
+
+  // ----- 📈 Timeline на отплата (кумулативна заштеда vs инвестиција) -----
+  const tlInv = best.investment_mkd;
+  const tlSave = best.annual_savings_mkd;
+  const tlYears = 16;
+  const TL_ESC = 0.025;  // раст на цени на струја ~2.5%/год (EVN тренд)
+  const tlLabels = Array.from({length: tlYears + 1}, (_, i) => 'Год. ' + i);
+  // Кумулативна заштеда СО раст: секоја година вреди повеќе
+  const cumSave = [0];
+  for (let i = 1; i <= tlYears; i++) {
+    cumSave.push(cumSave[i-1] + tlSave * Math.pow(1 + TL_ESC, i - 1));
+  }
+  const invLine = Array.from({length: tlYears + 1}, () => tlInv);
+  // Break-even со раст на струја
+  let breakYear = null;
+  if (tlSave > 0) {
+    for (let i = 1; i <= 40; i++) {
+      const cumI = tlSave * (Math.pow(1 + TL_ESC, i) - 1) / TL_ESC;
+      if (cumI >= tlInv) {
+        const cumPrev = tlSave * (Math.pow(1 + TL_ESC, i - 1) - 1) / TL_ESC;
+        breakYear = i - 1 + (tlInv - cumPrev) / (cumI - cumPrev);
+        break;
+      }
+    }
+  }
+  document.getElementById('tl-best-cap').textContent = best.capacity_kwh;
+
+  if (charts['chart-timeline']) charts['chart-timeline'].destroy();
+  const tlCtx = document.getElementById('chart-timeline').getContext('2d');
+  charts['chart-timeline'] = new Chart(tlCtx, {
+    type: 'line',
+    data: {
+      labels: tlLabels,
+      datasets: [
+        { label: 'Кумулативна заштеда', data: cumSave,
+          borderColor: '#3DDC97', backgroundColor: 'rgba(61,220,151,0.15)',
+          fill: true, tension: 0.1, borderWidth: 3, pointRadius: 3, pointBackgroundColor: '#3DDC97' },
+        { label: 'Инвестиција (цена на батерија)', data: invLine,
+          borderColor: '#FF6B6B', borderDash: [8, 6], borderWidth: 2, fill: false, pointRadius: 0 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#E3E8F3' } },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatMKD(ctx.raw)} МКД` } }
+      },
+      scales: {
+        x: { ticks: { color: '#A9B7D0' }, grid: { display: false } },
+        y: { ticks: { color: '#A9B7D0', callback: v => formatMKD(v) + ' МКД' },
+             grid: { color: 'rgba(255,255,255,0.05)' } }
+      }
+    }
+  });
+
+  const insightEl = document.getElementById('tl-insight');
+  if (breakYear && breakYear <= 15 && tlSave > 0) {
+    const y10 = cumSave[10] - tlInv;
+    const y15 = cumSave[15] - tlInv;
+    const pColor = y10 > 0 ? 'var(--mint)' : 'var(--rose)';
+    insightEl.innerHTML = `🎯 <b>Break-even</b> се постигнува по <b style="color:var(--accent);">${breakYear.toFixed(1)} години</b>. `
+      + `По 10 год: <b style="color:${pColor};">${y10 >= 0 ? '+' : ''}${formatMKD(y10)} МКД</b> чист профит. `
+      + `По 15 год: <b style="color:var(--mint);">+${formatMKD(y15)} МКД</b>. `
+      + `(LFP гаранција е обично 10 год — после тоа можеби ќе треба замена.)`;
+  } else if (tlSave <= 0) {
+    insightEl.innerHTML = `⚠️ Со тековните параметри батеријата не носи значајна заштеда → нема break-even.`;
+  } else {
+    insightEl.innerHTML = `⚠️ Инвестицијата не се отплаќа за 15 години со тековната цена. Пробај помал капацитет или чекај цените да паднат.`;
+  }
+
+  // (B) ECONOMIC verdict — зависи од цена:
+  //   GREEN: NPV > 0 и payback < 8 год  →  "Се исплати сега"
+  //   YELLOW: NPV > 0 ама payback 8-12  →  "Гранично — разгледај"
+  //   ORANGE: NPV ~ 0 или малку негативен →  "Блиску до прагот"
+  //   RED: NPV многу негативен         →  "Цената е превисока"
+  // Ефективна отплата СО раст на цените на струја (~2.5%/год — EVN тренд):
+  // заштедата расте секоја година → реалната отплата е пократка од простата.
+  const ESC = 0.025;  // конзервативен годишен раст на цени на струја
+  function effectivePayback(inv, save) {
+    if (save <= 1) return Infinity;
+    let cum = 0;
+    for (let t = 1; t <= 40; t++) {
+      cum += save * Math.pow(1 + ESC, t - 1);
+      if (cum >= inv) return t - 1 + (inv - (cum - save * Math.pow(1 + ESC, t - 1))) / (save * Math.pow(1 + ESC, t - 1));
+    }
+    return Infinity;
+  }
+  const effPB = effectivePayback(best.investment_mkd, best.annual_savings_mkd);
+
+  // Вердикт прагови (со раст на струја вклучен):
+  //   GREEN:  ефективна отплата < 8 год.
+  //   YELLOW: 8-12 год. (во гарантниот период, гранично)
+  //   ORANGE: 12-16 год. (во животниот век — блиску)
+  //   RED:    > 16 год. (не се исплати ни за целиот живот на батеријата)
+  let verdictKind, verdictText, verdictColor, verdictBg, verdictBorder;
+  if (effPB < 8) {
+    verdictKind = 'green';
+    verdictText = `✅ За батерија од ${best.capacity_kwh} kWh со цена ${formatMKD(best.investment_mkd)} МКД — <b>се исплати да ја купиш сега</b>. Отплата ~${effPB.toFixed(1)} г. (со раст на струја ~2.5%/год). NPV: ${formatMKD(best.npv_10yr_mkd)} МКД.`;
+    verdictColor = '#3DDC97'; verdictBg = 'rgba(61,220,151,0.1)'; verdictBorder = 'rgba(61,220,151,0.3)';
+  } else if (effPB < 12) {
+    verdictKind = 'yellow';
+    verdictText = `⚠️ За батерија од ${best.capacity_kwh} kWh со цена ${formatMKD(best.investment_mkd)} МКД — <b>гранично исплатливо</b>. Отплата ~${effPB.toFixed(1)} г. (со раст на струја ~2.5%/год) — во рамки на гаранцијата, но долго. Субвенција или подобра цена ја прават зелена.`;
+    verdictColor = '#FFB81C'; verdictBg = 'rgba(255,184,28,0.1)'; verdictBorder = 'rgba(255,184,28,0.3)';
+  } else if (effPB <= 16) {
+    verdictKind = 'orange';
+    verdictText = `🟠 За батерија од ${best.capacity_kwh} kWh со цена ${formatMKD(best.investment_mkd)} МКД — <b>се враќа за ~${effPB.toFixed(1)} г.</b> — во животниот век (15+ год.), но надвор од гаранцијата (10 год.). Со субвенција од 30% станува исплатлива.`;
+    verdictColor = '#FF9F40'; verdictBg = 'rgba(255,159,64,0.1)'; verdictBorder = 'rgba(255,159,64,0.3)';
+  } else {
+    verdictKind = 'red';
+    verdictText = `❌ За батерија од ${best.capacity_kwh} kWh со цена ${formatMKD(best.investment_mkd)} МКД — <b>не се исплати ни за 16 години</b> (ефективна отплата ${isFinite(effPB) ? '~' + effPB.toFixed(1) + ' г.' : 'никогаш'}, дури и со раст на струјата). Почекај цените да паднат под ~${formatMKD(best.investment_mkd * 0.6)} МКД.`;
+    verdictColor = '#FF6B6B'; verdictBg = 'rgba(255,107,107,0.1)'; verdictBorder = 'rgba(255,107,107,0.3)';
+  }
+
+  // Headline — СЕКОГАШ ист без оглед на цената (capacity е техничка препорака)
+  set('rec-headline', `За тебе техничката оптимална батерија е ${best.capacity_kwh} kWh 🔋`);
+
+  // Reasoning — фокусиран на ТЕХНИЧКИОТ fit, не цената
+  const pct = (best.annual_savings_mkd / noBat.annual_cost_with_battery_mkd * 100).toFixed(1);
+  let reasoning = `Твоето домаќинство троши <b>${formatMKD(userLoad)} kWh/год</b> со <b>${userPv} kWp</b> соларна инсталација. `
+                + `Алгоритамот тестираше ${candidates.length} капацитети и избра <b>${best.capacity_kwh} kWh</b> како точка каде што `
+                + `дополнителниот капацитет престанува да носи значителна додатна заштеда (<i>elbow на кривата на приноси</i>). `
+                + `Оваа препорака зависи само од твојот load, PV и тарифи — <b>НЕ од цената</b>. `
+                + `Со таа батерија ќе заштедиш ~<b>${formatMKD(best.annual_savings_mkd)} МКД годишно (${pct}%)</b> и ќе искористиш `
+                + `<b>${best.self_consumption_pct.toFixed(0)}%</b> од PV енергијата локално.`;
+  if (bill) {
+    reasoning += ` Твојата сегашна сметка од ~${formatMKD(bill)} МКД/месец би се намалила на ~<b>${formatMKD(bill - saveMonth)} МКД/месец</b>.`;
+  }
+  document.getElementById('rec-reasoning').innerHTML = reasoning;
+
+  set('rec-cap', best.capacity_kwh);
+  set('rec-invest', formatMKD(best.investment_mkd));
+  set('rec-save', formatMKD(best.annual_savings_mkd));
+  set('rec-save-month', '≈' + formatMKD(saveMonth));
+  set('rec-payback', best.payback_years.toFixed(1));
+
+  // Прикажи бренд + модел на препорачаната батерија (ако е реален производ)
+  const brandInfo = BATTERY_BRANDS[selectedBrand];
+  const modelName = brandInfo.models[best.capacity_kwh]
+                 || brandInfo.models[Math.round(best.capacity_kwh)];
+  const modelEl = document.getElementById('rec-model');
+  if (modelEl) {
+    if (modelName) {
+      // Директен линк до производот на akumulatori.mk (ако постои)
+      const cap = Math.round(best.capacity_kwh);
+      const link = (brandInfo.linkovi && (brandInfo.linkovi[best.capacity_kwh] || brandInfo.linkovi[cap]))
+                 || brandInfo.katalog;
+      const linkHtml = link
+        ? ` <a href="${link}" target="_blank" rel="noopener" style="color:var(--accent); font-weight:600; text-decoration:none; white-space:nowrap;">🔗 Види ја понудата →</a>`
+        : '';
+      modelEl.innerHTML =
+        `🏷️ <b>${brandInfo.label.split('(')[0].trim()}</b> — ${modelName}` +
+        `<span style="color:var(--muted);"> (извор: ${brandInfo.source})</span>${linkHtml}`;
+      modelEl.style.display = 'block';
+    } else {
+      modelEl.style.display = 'none';
+    }
+  }
+
+  // Комплетен пакет (PV + батерија) — покажи само ако корисникот нема PV
+  const pkgEl = document.getElementById('rec-total-package');
+  if (pvMode === 'none') {
+    const pvKwp = parseFloat(document.getElementById('pv').value) || 0;
+    const pvCostEur = pvPriceForKwp(pvKwp);
+    const pvCostMkd = pvCostEur * MKD_PER_EUR_PV;
+    const batCostMkd = best.investment_mkd;
+    const batCostEur = batCostMkd / MKD_PER_EUR_PV;
+    const totalMkd = pvCostMkd + batCostMkd;
+    const totalEur = pvCostEur + batCostEur;
+
+    set('pkg-pv-kwp',  pvKwp.toFixed(1));
+    set('pkg-pv-cost-eur', formatMKD(pvCostEur));
+    set('pkg-pv-cost-mkd', formatMKD(pvCostMkd));
+    set('pkg-bat-kwh', best.capacity_kwh);
+    set('pkg-bat-cost-eur', formatMKD(batCostEur));
+    set('pkg-bat-cost-mkd', formatMKD(batCostMkd));
+    set('pkg-total-eur', formatMKD(totalEur));
+    set('pkg-total-mkd', formatMKD(totalMkd));
+
+    // Пресметка: колку време за отплата на ЦЕЛ систем
+    // Заштеда со PV + батерија = (cost без ништо) − (cost со оптимала батерија)
+    // Но noBat веќе е „baseline" со PV (кога pv=5 kWp е стандардно pre-existing).
+    // За корисници без PV, мора да го вклучиме и бенефитот од PV-от.
+    // Приближно: PV заштеда = kWp × yield × self-consumption_rate × avg_tariff + export × feed_in
+    const avgTariff = 0.6 * data.inputs.tariff_high + 0.4 * data.inputs.tariff_low;
+    const feedIn = data.inputs.feed_in;
+    const pvAnnualKwh = pvKwp * PV_YIELD_KWH_PER_KWP;
+    const selfCons = (best.self_consumption_pct || 70) / 100;
+    const pvSavingsAnnual = pvAnnualKwh * selfCons * avgTariff
+                          + pvAnnualKwh * (1 - selfCons) * feedIn;
+    const totalAnnualSavings = pvSavingsAnnual + best.annual_savings_mkd;
+    const totalPayback = totalMkd / Math.max(1, totalAnnualSavings);
+
+    document.getElementById('pkg-breakeven').innerHTML =
+      `Вкупната инвестиција од <b>${formatMKD(totalMkd)} МКД</b> (${formatMKD(totalEur)} €) `
+      + `приближно се отплаќа за <b style="color:var(--sky);">~${totalPayback.toFixed(1)} години</b>, `
+      + `со проценета вкупна годишна заштеда од ~${formatMKD(totalAnnualSavings)} МКД `
+      + `(PV самопотрошувачка + батериска арбитража).`;
+
+    pkgEl.style.display = 'block';
+  } else {
+    pkgEl.style.display = 'none';
+  }
+
+  // Warning / Verdict — зависи од цена
+  const warn = document.getElementById('rec-warning');
+  warn.style.display = 'block';
+  warn.style.background = verdictBg;
+  warn.style.border = `1px solid ${verdictBorder}`;
+  warn.style.color = verdictColor;
+  warn.innerHTML = verdictText;
+
+  // Table
+  const tbody = document.querySelector('#results-table tbody');
+  tbody.innerHTML = '';
+  const bestNpv = rec.max_npv_kwh;
+  data.rows.forEach(r => {
+    const tr = document.createElement('tr');
+    if (r.capacity_kwh === bestNpv) tr.className = 'highlight';
+    const pb = (r.payback_years == null || !isFinite(r.payback_years))
+                 ? '—' : r.payback_years.toFixed(1) + ' год';
+    const sc = (r.self_consumption_pct == null) ? '—' : r.self_consumption_pct.toFixed(1) + '%';
+    tr.innerHTML = `
+      <td>${r.capacity_kwh} kWh</td>
+      <td>${moneyOrDash(r.investment_mkd)}</td>
+      <td>${moneyOrDash(r.annual_savings_mkd)}</td>
+      <td>${pb}</td>
+      <td>${moneyOrDash(r.npv_10yr_mkd)}</td>
+      <td>${sc}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById('run').addEventListener('click', runSizing);
+
+// ===== Бренд селектор =====
+document.getElementById('battery-brand').addEventListener('change', (e) => {
+  selectedBrand = e.target.value;
+  const brand = BATTERY_BRANDS[selectedBrand];
+  const hint = document.getElementById('brand-hint');
+  if (selectedBrand === 'felicity') {
+    hint.textContent = 'Цени од akumulatori.mk · LiFePO4 48V · 6000+ циклуси · гаранција до 10 год.';
+  } else {
+    hint.textContent = 'Приближни пазарни вредности — за спoредба со реалните.';
+  }
+});
+
+// ===== РЕЖИМ ТОГГЛЕ: Домаќинство ↔ Бизнис =====
+const HOME_DEFAULTS = {
+  bill: 10000, load: 10000, pv: 10,
+  tariffHigh: 6.3348, tariffLow: 2.2493,
+  pvButtons: [3, 5, 7, 10, 12],
+  // Preset копчиња по МЕСЕЧНА СМЕТКА (целна група: 10-12.000 МКД)
+  presets: [
+    { id: 'small', label: '~6.000 МКД', bill: 6000,  pv: 7  },
+    { id: 'avg',   label: '~10.000 МКД', bill: 10000, pv: 10 },
+    { id: 'large', label: '~12.000 МКД', bill: 12000, pv: 12 },
+  ],
+  loadHint: 'Просечно семејство со клима + бојлер: ~10,000 kWh/год',
+  modeHint: 'Блок тарифи ВТ/НТ · EVN Хоме 2026',
+  billHint: 'Внеси ја сметката → автоматски пресметуваме kWh и тарифен блок',
+};
+const BUSINESS_DEFAULTS = {
+  bill: 75000, load: 50000, pv: 30,
+  tariffHigh: 17.2833, tariffLow: 17.2833,
+  pvButtons: [20, 30, 50, 100],
+  // Фирмите плаќаат ~18 МКД/kWh → сметките се многукратно повисоки
+  presets: [
+    { id: 'small', label: '~30.000 МКД', bill: 30000,  pv: 20  },  // ~20.000 kWh/год
+    { id: 'avg',   label: '~75.000 МКД', bill: 75000,  pv: 30  },  // ~50.000 kWh/год
+    { id: 'large', label: '~150.000 МКД', bill: 150000, pv: 60 },  // ~100.000 kWh/год
+  ],
+  loadHint: 'Мал бизнис / погон / фарма: 20.000-150.000 kWh/год',
+  modeHint: 'FLAT 17.2833 ден/kWh — „мали потрошувачи" EVN Хоме 2026 · нема ВТ/НТ',
+  billHint: 'Внеси ја месечната сметка на фирмата → автоматски пресметуваме kWh',
+};
+
+function applyMode(mode) {
+  appMode = mode;
+  const d = mode === 'business' ? BUSINESS_DEFAULTS : HOME_DEFAULTS;
+  const homeBtn = document.getElementById('mode-home');
+  const busBtn = document.getElementById('mode-business');
+  const activeStyle = (btn, on) => {
+    btn.style.background = on ? 'var(--accent)' : 'rgba(255,255,255,0.04)';
+    btn.style.color = on ? 'var(--bg)' : 'var(--ink)';
+    btn.style.borderColor = on ? 'var(--accent)' : 'var(--border)';
+    btn.style.fontWeight = on ? '700' : '400';
+  };
+  activeStyle(homeBtn, mode === 'home');
+  activeStyle(busBtn, mode === 'business');
+
+  // --- Полиња ---
+  document.getElementById('pv').value = d.pv;
+  document.getElementById('tariff_high').value = d.tariffHigh;
+  document.getElementById('tariff_low').value = d.tariffLow;
+  document.getElementById('load-hint').textContent = d.loadHint;
+  document.getElementById('mode-hint').textContent = d.modeHint;
+
+  // --- Preset копчиња за сметка (различни износи по режим) ---
+  const presetBtns = document.querySelectorAll('.preset-btn');
+  presetBtns.forEach((b, i) => {
+    const p = d.presets[i];
+    if (p) {
+      b.dataset.preset = p.id;
+      b.textContent = p.label;
+      b.style.display = '';
+    } else {
+      b.style.display = 'none';
+    }
+  });
+  // Ажурирај го PRESETS објектот што го користи click handler-от
+  d.presets.forEach(p => { PRESETS[p.id] = { bill: p.bill, pv: p.pv }; });
+
+  // --- Постави ја сметката и пресметај kWh ---
+  document.getElementById('bill').value = d.bill;
+  document.getElementById('bill').placeholder = 'нпр. ' + d.bill;
+  recalcFromBill(d.bill);
+
+  // --- 4-те сезонски сметки: САМО за домаќинства ---
+  // Фирмите имаат рамна тарифа цела година — сезонската поделба нема ефект
+  // врз тарифата, па формата само би збунувала.
+  const smetkiBlok = document.getElementById('smetka-mart').closest('details');
+  if (smetkiBlok) {
+    smetkiBlok.style.display = (mode === 'business') ? 'none' : '';
+    if (mode === 'business') {
+      smetkiBlok.open = false;
+      ['mart', 'juni', 'septemvri', 'dekemvri'].forEach(m => {
+        document.getElementById('smetka-' + m).value = '';
+      });
+    }
+  }
+
+  // --- Греење: само за домаќинства (фирмите имаат друг профил) ---
+  const greenjeField = document.getElementById('greenje').closest('.field');
+  if (greenjeField) greenjeField.style.display = (mode === 'business') ? 'none' : '';
+
+  // --- PV preset копчиња — релабелирање ---
+  document.querySelectorAll('.pv-size-btn').forEach((b, i) => {
+    if (b.dataset.kwp === 'custom') return;
+    if (i < d.pvButtons.length) {
+      b.dataset.kwp = d.pvButtons[i];
+      b.textContent = d.pvButtons[i] + ' kWp';
+      b.style.display = '';
+    } else {
+      b.style.display = 'none';
+    }
+  });
+
+  // --- Бренд dropdown — заклучен во бизнис режим (фиксно Felicity stacks) ---
+  const brandHint = document.getElementById('brand-hint');
+  if (mode === 'business') {
+    document.getElementById('battery-brand').disabled = true;
+    brandHint.textContent = 'Бизнис: Felicity stack-ови 20-120 kWh (реални цени akumulatori.mk)';
+  } else {
+    document.getElementById('battery-brand').disabled = false;
+    brandHint.textContent = 'Цени од akumulatori.mk · LiFePO4 48V · 6000+ циклуси · гаранција до 10 год.';
+  }
+  updatePvHavePrice();
+}
+
+// При отворање на страницата: земи ги цените од config.py (преку /api/ceni)
+vcitajCeniOdServer();
+
+document.getElementById('mode-home').addEventListener('click', () => applyMode('home'));
+document.getElementById('mode-business').addEventListener('click', () => applyMode('business'));
+</script>
+
+</body>
+</html>

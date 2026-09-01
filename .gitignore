@@ -1,0 +1,29 @@
+# Виртуелна околина — секој си прави своја
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# macOS
+.DS_Store
+
+# Anaconda
+anaconda_projects/
+
+# Трениран модел (се генерира со: python ml_prognoza.py)
+data/xgb_model.joblib
+
+# Излезни фајлови
+*.pdf
