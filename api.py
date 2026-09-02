@@ -33,10 +33,8 @@ log = logging.getLogger("api")
 
 ROOT = Path(__file__).parent
 app = Flask(__name__, static_folder=str(ROOT), static_url_path="")
-CORS(app)   # дозволи повици од browser (различен origin)
+CORS(app)
 
-# Податоците се вчитуваат ЕДНАШ при стартување — по еден сет за секој тип
-# греење (за да не се регенерира профилот на секое барање).
 log.info("Вчитувам податоци (PVGIS + load профили)...")
 PODATOCI = {g: zemi_gi_site_podatoci(10000, g) for g in ("struja", "toplinska", "drva")}
 log.info("Готово: %d редови по профил", len(PODATOCI["struja"]))
@@ -103,14 +101,11 @@ def sizing():
     smetki = p.get("smetki") or {}
     pv_kwp = float(p.get("pv", 5.0))
 
-    # РЕЖИМ: домаќинство (ВТ/НТ тарифи + блокови) или фирма (рамна тарифа)
     rezim = "biznis" if p.get("mode") == "business" else "domakinstvo"
 
-    # --- Од 4-те сметки → kWh + сезонски тежини + маргинален блок ---
     ima_smetki = any(v for v in smetki.values() if v)
 
     if rezim == "biznis":
-        # Фирма: рамна тарифа → проста инверзија (нема блокови)
         cena_po_kwh = config.BIZNIS_CENA + config.BIZNIS_MREZARINA
         if ima_smetki:
             mesecni = [float(v) / cena_po_kwh for v in smetki.values() if v]
@@ -128,28 +123,20 @@ def sizing():
         tezini = None
         blok, vt_cena = marginalen_blok(godisen_kwh / 12 * 0.5)
 
-    # Manual override на ВТ од формата — само ако НЕМА сметки
-    # (кога има сметки, автоматскиот блок е поточен од рачната вредност)
     if p.get("tariff_high") and not ima_smetki:
         vt_cena = float(p["tariff_high"])
 
-    # Кои капацитети да се тестираат (frontend праќа листа; 0 = без батерија)
     katalog = config.BATERII_BIZNIS if rezim == "biznis" else config.BATERII
     caps = [c for c in (p.get("caps") or list(katalog.keys())) if c and c > 0]
 
     log.info("Барање [%s]: %s kWh/год · %s · %s kWp · цена %.4f",
              rezim, round(godisen_kwh), greenje, pv_kwp, vt_cena)
 
-    # --- Пушти ги LP пресметките за сите батерии ---
     df = PODATOCI[greenje]
     rezultati = testiraj_site_baterii(df, godisen_kwh, pv_kwp, vt_cena,
                                        tezini, caps, rezim)
     najdobra = preporaka(rezultati)
 
-    # --------------------------------------------------------------------------
-    # Одговорот е во ИСТИОТ формат како стариот проект — за да работи
-    # постоечкиот index.html без промени во render логиката.
-    # --------------------------------------------------------------------------
     rows = [{
         "capacity_kwh": float(r["kapacitet_kwh"]),
         "annual_savings_mkd": float(r["zasteda_godisno"]),
@@ -180,7 +167,7 @@ def sizing():
     return jsonify({
         "inputs": {
             "load": round(godisen_kwh), "pv": pv_kwp,
-            "price": 18941,   # просечна цена/kWh (frontend прави override)
+            "price": 18941,
             "tariff_high": vt_cena,
             "tariff_low": config.BIZNIS_CENA if rezim == "biznis" else config.NT_CENA,
             "feed_in": config.FEED_IN, "caps": [0] + caps,

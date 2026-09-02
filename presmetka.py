@@ -25,7 +25,6 @@ import pandas as pd
 import config
 from lp_optimizacija import optimalen_dispech, bez_baterija
 
-# Претставнички недели — по една од секоја сезона (во 2023 тест-годината)
 SEZONSKI_NEDELI = {
     "zima":    "2023-01-16",
     "prolet":  "2023-04-10",
@@ -34,9 +33,6 @@ SEZONSKI_NEDELI = {
 }
 
 
-# ==============================================================================
-# 1. ТАРИФИ — колку чини струјата во секој час (EVN 2026)
-# ==============================================================================
 def ceni_po_cas(index: pd.DatetimeIndex, vt_cena: float,
                 rezim: str = "domakinstvo") -> pd.Series:
     """За секој час: колку чини 1 kWh од EVN (тарифа + мрежарина).
@@ -54,20 +50,15 @@ def ceni_po_cas(index: pd.DatetimeIndex, vt_cena: float,
          на сопственото сонце (но цената е ~18 ден/kWh — доволно вредно)
     """
     if rezim == "biznis":
-        # Рамна тарифа — иста бројка за сите часови
         cena = np.full(len(index), config.BIZNIS_CENA + config.BIZNIS_MREZARINA)
         return pd.Series(cena, index=index)
 
-    # Домаќинство — ВТ/НТ поделба
     local = index.tz_convert(config.TIMEZONE)
     vt = np.isin(local.hour, config.VT_CASOVI) & (local.dayofweek < 6)
     cena = np.where(vt, vt_cena, config.NT_CENA) + config.MREZARINA
     return pd.Series(cena, index=index)
 
 
-# ==============================================================================
-# 2. ОД СМЕТКИ → kWh + МАРГИНАЛЕН БЛОК
-# ==============================================================================
 def smetka_vo_kwh(mesecna_smetka: float) -> float:
     """Инверзна пресметка: од месечна сметка (МКД) → месечни kWh.
 
@@ -75,7 +66,6 @@ def smetka_vo_kwh(mesecna_smetka: float) -> float:
     Бараме kWh со бисекција (пробуваме сè додека не се совпадне).
     """
     def kolku_cini(m_kwh):
-        # ⚠ ВТ уделот е 57.1%, НЕ 50% — вечерниот пик (18-22ч) паѓа во ВТ.
         vt_del = m_kwh * config.VT_UDEL
         nt_del = m_kwh * (1 - config.VT_UDEL)
         cost, prev, ostatok = 0.0, 0, vt_del
@@ -90,7 +80,7 @@ def smetka_vo_kwh(mesecna_smetka: float) -> float:
         return cost + nt_del * config.NT_CENA + m_kwh * config.MREZARINA
 
     lo, hi = 10.0, 10000.0
-    for _ in range(60):                      # бисекција — 60 чекори се доволни
+    for _ in range(60):
         mid = (lo + hi) / 2
         if kolku_cini(mid) < mesecna_smetka:
             lo = mid
@@ -136,55 +126,37 @@ def od_4_smetki(smetki: dict) -> tuple[float, dict, int, float]:
     prosek = np.mean(list(mesecni_kwh.values()))
     godisen_kwh = prosek * 12
 
-    # Сезонски тежини: колку секоја сезона троши СПОРЕДЕНО со просекот
-    # (пр. зима 1.8× ако декемвриската сметка е голема — греење на струја!)
     tezini = {s: kwh / prosek for s, kwh in mesecni_kwh.items()}
     for s in SEZONSKI_NEDELI:
-        tezini.setdefault(s, 1.0)   # ако недостасува сметка → просечна тежина
+        tezini.setdefault(s, 1.0)
 
-    # Маргинален блок според НАЈГОЛЕМИОТ месец (зимата одлучува!)
     najgolem = max(mesecni_kwh.values())
     blok, vt_cena = marginalen_blok(najgolem * config.VT_UDEL)
 
     return godisen_kwh, tezini, blok, vt_cena
 
 
-# ==============================================================================
-# 3. SWEEP — тестирај ги СИТЕ батерии од понудата
-# ==============================================================================
 def testiraj_site_baterii(
-    df: pd.DataFrame,          # податоци од podatoci.py (сонце + потрошувачка)
+    df: pd.DataFrame,
     godisen_kwh: float,
     pv_kwp: float,
     vt_cena: float,
-    tezini: dict | None = None,   # сезонски тежини од 4-те сметки
-    kapaciteti: list | None = None,  # кои батерии да се тестираат (default: сите)
-    rezim: str = "domakinstvo",   # "domakinstvo" (ВТ/НТ) или "biznis" (рамна)
+    tezini: dict | None = None,
+    kapaciteti: list | None = None,
+    rezim: str = "domakinstvo",
 ) -> list[dict]:
     """За секоја батерија: LP на 4 сезонски недели → годишна заштеда → економија.
 
     Враќа листа од редови: капацитет, цена, заштеда, отплата, NPV,
     само-потрошувачка (% од PV енергијата искористена дома).
     """
-    # Различни каталози: домаќинства 5-30 kWh · фирми 20-120 kWh
     katalog = config.BATERII_BIZNIS if rezim == "biznis" else config.BATERII
     kapaciteti = kapaciteti or list(katalog.keys())
 
-    # Скалирање на профилите кон корисничките вредности
     godini = df.index.year.nunique()
     load_skala = godisen_kwh / (df["load_kwh"].sum() / godini)
     pv_skala = pv_kwp / config.PV_KWP
 
-    # ==========================================================================
-    # ⚠ КОРЕКЦИЈА НА СЕЗОНАЛНОСТА — за да НЕМА двојно броење
-    # ==========================================================================
-    # Проблем: load профилот ВЕЌЕ има вградена сезоналност (од греењето —
-    # зимата е ~1.3× од просекот). Ако одозгора помножиме со корисничката
-    # тежина (пр. зима 1.7×), добиваме 1.3 × 1.7 = 2.2× — премногу!
-    #
-    # Решение: измери ја сопствената сезоналност на профилот, и примени
-    # само КОРЕКЦИЈА = кориснички / профилски. Финалниот резултат тогаш
-    # точно ја одразува сезоналноста од сметките на корисникот.
     profil_tezini = {}
     for sezona, start in SEZONSKI_NEDELI.items():
         s = pd.Timestamp(start, tz="UTC")
@@ -193,10 +165,9 @@ def testiraj_site_baterii(
     profil_tezini = {k: v / prosek_profil for k, v in profil_tezini.items()}
 
     if tezini:
-        # Корекција: колку да ја „поправиме" вградената сезоналност
         korekcija = {s: tezini.get(s, 1.0) / profil_tezini[s] for s in SEZONSKI_NEDELI}
     else:
-        korekcija = {s: 1.0 for s in SEZONSKI_NEDELI}   # нема сметки → остави како е
+        korekcija = {s: 1.0 for s in SEZONSKI_NEDELI}
 
     def nedelna_presmetka(kapacitet):
         """Врати (годишен трошок, self-consumption %) за даден капацитет."""
@@ -204,7 +175,6 @@ def testiraj_site_baterii(
         for sezona, start in SEZONSKI_NEDELI.items():
             s = pd.Timestamp(start, tz="UTC")
             w = df.loc[s: s + pd.Timedelta(hours=167)]
-            # load_skala → на корисничкиот kWh · korekcija → на неговата сезоналност
             load = w["load_kwh"] * load_skala * korekcija[sezona]
             pv = w["pv_power_kw"] * pv_skala
             ceni = ceni_po_cas(w.index, vt_cena, rezim)
@@ -215,11 +185,9 @@ def testiraj_site_baterii(
             vkupno += r["trosok"]
             izvoz += r["izvoz_kwh"]
             pv_suma += float(pv.sum())
-        # self-consumption: колку % од сонцето останало ДОМА (не е продадено)
         self_pct = 100 * (1 - izvoz / pv_suma) if pv_suma > 0 else 0.0
-        return vkupno / 4 * 52, self_pct     # 4 недели → цела година
+        return vkupno / 4 * 52, self_pct
 
-    # Прво: колку чини БЕЗ батерија (референца за заштедата)
     baza, baza_self = nedelna_presmetka(0)
 
     def cena_za(kapacitet):
@@ -239,12 +207,8 @@ def testiraj_site_baterii(
         godisen_trosok, self_pct = nedelna_presmetka(kapacitet)
         zasteda = baza - godisen_trosok
 
-        # --- Економика ---
-        # Отплата СО раст на цените на струја (~2.5%/год): секоја година
-        # заштедата вреди повеќе → реалната отплата е пократка.
         otplata = _otplata_so_rast(cena, zasteda)
 
-        # NPV: сегашна вредност на сите идни заштеди минус инвестицијата
         npv = sum(
             zasteda * (1 + config.RAST_NA_STRUJA) ** t / (1 + config.DISKONT) ** t
             for t in range(1, config.ZIVOTEN_VEK + 1)

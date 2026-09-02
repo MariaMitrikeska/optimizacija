@@ -43,121 +43,62 @@ from __future__ import annotations
 import pandas as pd
 
 import config
-# Забелешка: `import pulp` е внатре во функцијата — за фајлот да може да се
-# вчита и на машини без PuLP (пр. за тестирање на другите делови).
 
 
 def optimalen_dispech(
-    load: pd.Series,       # прогноза: колку куќата троши секој час (kWh) series bidejki se menuvaat sekoj cas, ima 168brojki
-    pv: pd.Series,         # прогноза: колку сонцето дава секој час (kW)
-    cena_uvoz: pd.Series,  # колку чини да купиш од EVN тој час (МКД/kWh)
-    cena_izvoz: float,     # колку добиваш ако продадеш (feed-in, МКД/kWh) //samo edna brojka 1.50 (dali da go trgnam)
-    kapacitet_kwh: float,  # големина на батеријата што ја тестираме fiksna za ovaa presmetka
+    load: pd.Series,
+    pv: pd.Series,
+    cena_uvoz: pd.Series,
+    cena_izvoz: float,
+    kapacitet_kwh: float,
 ) -> dict:
     """Најди го НАЈЕВТИНИОТ можен план за батеријата за дадениот период.
 
     Враќа: {"trosok": вкупна сметка во МКД, "izvoz": продадено kWh, ...}
     """
-    import pulp   # тука — за да работи модулот и без инсталиран PuLP
+    import pulp
 
-    T = len(load)   # број на часови (пр. 168 за една недела)
+    T = len(load)
 
-    # Изведени параметри на батеријата (од config)
-    max_soc = kapacitet_kwh                              # полна батерија soc e State Of Charge
-    min_soc = kapacitet_kwh * config.BATERIJA_MIN_SOC    # 10% резерва
-    max_moknost = max(2.0, kapacitet_kwh * config.BATERIJA_C_RATE)  # 0.5C макс. 5 kW полнење/празнење на час
-    eff = config.BATERIJA_EFIKASNOST ** 0.5              # поделено на полн/празн
+    max_soc = kapacitet_kwh
+    min_soc = kapacitet_kwh * config.BATERIJA_MIN_SOC
+    max_moknost = max(2.0, kapacitet_kwh * config.BATERIJA_C_RATE)
+    eff = config.BATERIJA_EFIKASNOST ** 0.5
 
-    # --------------------------------------------------------------------------
-    # 1. ПРОБЛЕМ: „минимизирај го трошокот"
-    # --------------------------------------------------------------------------
     prob = pulp.LpProblem("bateriski_dispech", pulp.LpMinimize)
 
-    # --------------------------------------------------------------------------
-    # 2. ОДЛУКИ (променливи) — за СЕКОЈ час t, LP одлучува 5 бројки:
-    # --------------------------------------------------------------------------
-    kupi = pulp.LpVariable.dicts("kupi", range(T), lowBound=0)      # од EVN
-    prodaj = pulp.LpVariable.dicts("prodaj", range(T), lowBound=0)  # кон EVN
+    kupi = pulp.LpVariable.dicts("kupi", range(T), lowBound=0)
+    prodaj = pulp.LpVariable.dicts("prodaj", range(T), lowBound=0)
     polni = pulp.LpVariable.dicts("polni", range(T), lowBound=0, upBound=max_moknost)
     prazni = pulp.LpVariable.dicts("prazni", range(T), lowBound=0, upBound=max_moknost)
     soc = pulp.LpVariable.dicts("soc", range(T + 1), lowBound=min_soc, upBound=max_soc)
-    # soc = State of Charge — колку енергија има во батеријата во секој момент
 
-    # --------------------------------------------------------------------------
-    # 3. ЦЕЛ: минимална вкупна сметка
-    #    сметка = Σ (купено × цена_увоз) − Σ (продадено × цена_извоз)
-    # --------------------------------------------------------------------------
     prob += pulp.lpSum(
         kupi[t] * float(cena_uvoz.iloc[t]) - prodaj[t] * cena_izvoz
         for t in range(T)
     )
 
-    # --------------------------------------------------------------------------
-    # 4. ОГРАНИЧУВАЊА — правилата на физиката (LP МОРА да ги почитува)
-    # --------------------------------------------------------------------------
-    prob += soc[0] == kapacitet_kwh * 0.5    # почни со полу-полна батерија
+    prob += soc[0] == kapacitet_kwh * 0.5
 
     for t in range(T):
-        # (а) ЕНЕРГЕТСКИ БИЛАНС: што влегува = што излегува, секој час.
-        #     потрошувачка = сонце + купено − продадено + испразнето − наполнето
 
-#Со зборови: што влегува мора да излезе. Енергијата не се создава од ништо.
-# Пример, 19:00 навечер:
-#
-# Куќата бара:      2.0 kWh
-# Сонцето дава:     0
-# Батеријата дава:  1.5 kWh
-# ────────────────────────────
-# Од мрежа:         0.5 kWh
-
-
-
-        # ⚡ ВАЖНО — ОВА ЈА ОВОЗМОЖУВА АРБИТРАЖАТА:
-        # `kupi[t]` нема горна граница, а `polni[t]` влегува во равенката.
-        # Затоа LP СМЕЕ да купи струја од мрежа И да ја стави во батерија:
-        #     kupi = load − pv + prodaj − prazni + polni
-        # Пример: во 03:00 (НТ, ефтино) load=1, pv=0, сака да полни 4 kWh
-        #     → kupi = 1 − 0 + 0 − 0 + 4 = 5 kWh од мрежа
-        #     (1 за куќата, 4 во батеријата)
-        # Потоа во 19:00 (ВТ, скапо) ја празни и не купува ништо.
 
         prob += (
             float(load.iloc[t])
             == float(pv.iloc[t]) + kupi[t] - prodaj[t] + prazni[t] - polni[t]
         )
 
-        # (б) ДИНАМИКА НА БАТЕРИЈАТА: следниот SOC = сегашен + влез − излез.
-        #     eff < 1 значи дека дел од енергијата се губи (топлина).
         prob += soc[t + 1] == soc[t] + polni[t] * eff - prazni[t] / eff
 
-        #soc[3] = 5.0 kWh          (сегашна состојба)
-#Полниш 2 kWh:
-# внатре влегуваат 2 × 0.949 = 1.90    ← губиш 5% при полнење
-#soc[4] = 5.0 + 1.90 = 6.90 kWh
-#Кога празниш е обратно — делиш:
-#Вадиш 2 kWh за куќата:
-#од батеријата се трошат 2 ÷ 0.949 = 2.11   ← пак 5% губиток
-#vкупно за цел циклус: 10% загуба (топлина).
 
-        # (г) Опционо: забрани полнење од мрежа (ако prosumer договорот бара
-        #     батеријата да се полни САМО од сопствено сонце).
-        #     Тогаш: наполнетото ≤ вишокот сонце во тој час.
         if not config.DOZVOLI_POLNENJE_OD_MREZA:
             visok_sonce = max(0.0, float(pv.iloc[t]) - float(load.iloc[t]))
             prob += polni[t] <= visok_sonce
 
-    # (в) На крај врати ја батеријата на почетното ниво — инаку LP би
-    #     „мамел" со празнење до нула на последниот час.
     prob += soc[T] == kapacitet_kwh * 0.5
 
-    # --------------------------------------------------------------------------
-    # 5. РЕШИ! CBC solver-от ја прави математиката (< 1 секунда)
-    # --------------------------------------------------------------------------
-    prob.solve(pulp.PULP_CBC_CMD(msg=0))    # msg=0 → без испис
+    prob.solve(pulp.PULP_CBC_CMD(msg=0))
 
-    # ⚠ ПРОВЕРКА: дали solver-от навистина најде оптимално решение?
-    # Ако проблемот е нерешлив (Infeasible) или неограничен (Unbounded),
-    # резултатите се безвредни — подобро да падне со јасна порака.
     status = pulp.LpStatus[prob.status]
     if status != "Optimal":
         raise RuntimeError(
@@ -165,13 +106,10 @@ def optimalen_dispech(
             f"Провери ги влезните податоци — капацитет={kapacitet_kwh} kWh."
         )
 
-    # --------------------------------------------------------------------------
-    # 6. Извади ги резултатите
-    # --------------------------------------------------------------------------
     vkupno_prodadeno = sum(prodaj[t].value() or 0.0 for t in range(T))
     return {
-        "trosok": float(pulp.value(prob.objective)),  # сметка за периодот (МКД)
-        "izvoz_kwh": float(vkupno_prodadeno),         # колку kWh продадени на EVN
+        "trosok": float(pulp.value(prob.objective)),
+        "izvoz_kwh": float(vkupno_prodadeno),
     }
 
 
@@ -185,11 +123,9 @@ def bez_baterija(load, pv, cena_uvoz, cena_izvoz) -> dict:
     for t in range(len(load)):
         razlika = float(pv.iloc[t]) - float(load.iloc[t])
         if razlika >= 0:
-            trosok -= razlika * cena_izvoz     # вишок → продаваме
+            trosok -= razlika * cena_izvoz
             izvoz += razlika
         else:
-            trosok += -razlika * float(cena_uvoz.iloc[t])   # дефицит → купуваме
+            trosok += -razlika * float(cena_uvoz.iloc[t])
     return {"trosok": trosok, "izvoz_kwh": izvoz}
 
-
-#

@@ -34,67 +34,47 @@ import config
 
 MODEL_PATH = config.DATA / "xgb_model.joblib"
 
-# Границата: учи ПРЕД, тестирај ПОСЛЕ.
-# ⚠ Никогаш random split кај временски серии — тоа е „ѕиркање во иднината".
 SPLIT_DATUM = "2023-07-01"
 
 
-# ==============================================================================
-# ФАЗА 1: FEATURES — што „гледа" моделот
-# ==============================================================================
 def napravi_features(df: pd.DataFrame) -> pd.DataFrame:
     """Од суровите податоци направи ги 22-те влезни колони за моделот."""
     f = df.copy()
     lok = f.index.tz_convert(config.TIMEZONE)
 
-    # --- ВРЕМЕ: циклично кодирање -------------------------------------------
-    # Час 23 и час 0 се СОСЕДНИ, но како броеви изгледаат далечни.
-    # Sin/cos ги претвора во точка на круг → соседството се зачувува.
     f["hour_sin"] = np.sin(2 * np.pi * lok.hour / 24)
     f["hour_cos"] = np.cos(2 * np.pi * lok.hour / 24)
-    f["doy_sin"] = np.sin(2 * np.pi * lok.dayofyear / 365)   # сезона
+    f["doy_sin"] = np.sin(2 * np.pi * lok.dayofyear / 365)
     f["doy_cos"] = np.cos(2 * np.pi * lok.dayofyear / 365)
 
-    # --- ОБЛАЦИ: изведени features ------------------------------------------
-    # ⚠ ЗОШТО НЕ ГО КОРИСТИМЕ `ghi`?
-    # PVGIS ја пресметува PV моќноста ДИРЕКТНО од ghi по физичка формула.
-    # Ако му ја дадеме, моделот „препишува" наместо да учи → DATA LEAKAGE.
-    # Во пракса утре ја знаеме прогнозата за облаци, но НЕ и измерената
-    # радијација. Затоа ghi е намерно ИСКЛУЧЕН.
     if "cloud_cover" in f.columns:
-        f["cloud_kvadrat"] = f["cloud_cover"] ** 2 / 100    # нелинеарен ефект
+        f["cloud_kvadrat"] = f["cloud_cover"] ** 2 / 100
         f["vedro"] = (f["cloud_cover"] < 20).astype(int)
         f["oblacno"] = (f["cloud_cover"] > 70).astype(int)
-        f["cloud_pred"] = f["cloud_cover"].shift(1)         # претходен час
-        f["cloud_promena"] = f["cloud_cover"].diff()        # доаѓа ли фронт?
+        f["cloud_pred"] = f["cloud_cover"].shift(1)
+        f["cloud_promena"] = f["cloud_cover"].diff()
 
-    # Ниските облаци (стратус) блокираат ~3× повеќе од високите (перјести)
     if "cloud_low" in f.columns:
         f["cloud_efektivna"] = (
             3.0 * f["cloud_low"] + 1.5 * f.get("cloud_mid", 0) + 0.5 * f.get("cloud_high", 0)
         ) / 5.0
 
-    # --- ИСТОРИЈА (легитимно — минати вредности ги знаеме однапред) ----------
-    f["pv_lag24"] = f["pv_power_kw"].shift(24)              # пред 1 ден
-    f["pv_lag48"] = f["pv_power_kw"].shift(48)              # пред 2 дена
-    f["pv_lag168"] = f["pv_power_kw"].shift(24 * 7)         # пред 1 недела
-    # shift(24) ПРВО → просекот да НЕ го содржи тековниот час!
+    f["pv_lag24"] = f["pv_power_kw"].shift(24)
+    f["pv_lag48"] = f["pv_power_kw"].shift(48)
+    f["pv_lag168"] = f["pv_power_kw"].shift(24 * 7)
     f["pv_prosek7d"] = f["pv_power_kw"].shift(24).rolling(24 * 7).mean()
     f["temp_lag24"] = f["temp_air"].shift(24)
 
-    return f.dropna()   # исфрли ги првите редови без историја
+    return f.dropna()
 
 
-# Основни features — секогаш достапни (календар + температура + историја)
 FEATURES_OSNOVNI = ["hour_sin", "hour_cos", "doy_sin", "doy_cos",
                     "temp_air", "temp_lag24", "wind_speed",
                     "pv_lag24", "pv_lag48", "pv_lag168", "pv_prosek7d"]
 
-# Метеоролошки — само ако има податоци за облачност
 FEATURES_VREME = ["humidity", "cloud_cover", "cloud_kvadrat", "vedro",
                   "oblacno", "cloud_pred", "cloud_promena"]
 
-# Облаци по висина
 FEATURES_OBLACI = ["cloud_low", "cloud_mid", "cloud_high", "cloud_efektivna"]
 
 
@@ -107,56 +87,48 @@ def izberi_features(df: pd.DataFrame) -> list[str]:
     return feats
 
 
-FEATURES = FEATURES_OSNOVNI    # fallback ако нема метео податоци
+FEATURES = FEATURES_OSNOVNI
 
 
-# ==============================================================================
-# ФАЗА 2: ТРЕНИРАЊЕ
-# ==============================================================================
 def treniraj(df: pd.DataFrame):
     """Тренирај XGBoost и врати (модел, тест-табела).
 
     Хиперпараметрите се ИСТИ како во ml_prognoza.ipynb.
     """
-    from xgboost import XGBRegressor   # import тука — за да работи и без xgboost
+    from xgboost import XGBRegressor
 
     f = napravi_features(df)
     feats = izberi_features(f)
     split = pd.Timestamp(SPLIT_DATUM, tz="UTC")
-    train = f[f.index < split]      # ~30 месеци за учење
-    test = f[f.index >= split]      # ~6 месеци СКРИЕНИ од моделот
+    train = f[f.index < split]
+    test = f[f.index >= split]
 
     model = XGBRegressor(
-        n_estimators=600,       # 600 дрва
-        max_depth=10,           # доволно длабоко за сложени комбинации
-        learning_rate=0.05,     # мали чекори = стабилно учење
-        subsample=0.8,          # секое дрво гледа 80% од редовите
-        colsample_bytree=0.8,   # секое дрво гледа 80% од features
-        min_child_weight=3,     # барем 3 примери по лист (анти-overfit)
-        reg_lambda=1.0,         # L2 регуларизација
+        n_estimators=600,
+        max_depth=10,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        min_child_weight=3,
+        reg_lambda=1.0,
         random_state=config.RANDOM_SEED if hasattr(config, "RANDOM_SEED") else 42,
         n_jobs=-1,
     )
 
-    # ══════════════ ОВА Е МОМЕНТОТ НА УЧЕЊЕ ══════════════
     model.fit(train[feats], train["pv_power_kw"])
-    # ═════════════════════════════════════════════════════
 
-    model._feats = feats   # запомни ги features за prognoziraj()
+    model._feats = feats
 
     import joblib
     joblib.dump({"model": model, "feats": feats}, MODEL_PATH)
     return model, test
 
 
-# ==============================================================================
-# ФАЗА 3: ПРОГНОЗА — „што ќе се случи утре?"
-# ==============================================================================
 def prognoziraj(model, df_novi_casovi: pd.DataFrame) -> pd.Series:
     """За нови часови → прогноза на PV во kW. Ова е влезот за LP!"""
     feats = getattr(model, "_feats", FEATURES)
     pred = model.predict(df_novi_casovi[feats])
-    pred = np.clip(pred, 0, None)   # панелите не даваат негативна моќност
+    pred = np.clip(pred, 0, None)
     return pd.Series(pred, index=df_novi_casovi.index, name="pv_prognoza")
 
 
@@ -169,9 +141,6 @@ def vcitaj_model():
     return model
 
 
-# ==============================================================================
-# ФАЗА 4: ОЦЕНКА — колку добро погодува? (чесна проверка)
-# ==============================================================================
 def oceni(model, test: pd.DataFrame) -> dict:
     """Спореди ги прогнозите со РЕАЛНОСТА на тест-периодот.
 
@@ -196,7 +165,6 @@ def oceni(model, test: pd.DataFrame) -> dict:
     }
 
 
-# --- Тест: `python ml_prognoza.py` — тренира и покажува колку е точен ---
 if __name__ == "__main__":
     from podatoci import zemi_gi_site_podatoci
 
