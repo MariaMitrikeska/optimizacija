@@ -22,7 +22,7 @@
 
 ```bash
 # 1. Клонирај го проектот
-git clone https://github.com/KORISNICKO-IME/optimizacija.git
+git clone https://github.com/MariaMitrikeska/optimizacija.git
 cd optimizacija
 
 # 2. Направи виртуелна околина (препорачано)
